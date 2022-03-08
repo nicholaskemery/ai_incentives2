@@ -104,7 +104,7 @@ class MultiAgent:
         p = self.prodFunc.P(Kp, Lp)
         s = self.prodFunc.S(Ks, Ls, p)
         proba = (s / (1 + s)).prod(axis=-1)
-        return proba * self.R(p, i) - (1 - proba) * self.d[i] - self.r * (Ks[:, i] + Kp[:, i]) - self.w * (Ls[:, i] + Lp[:, i])
+        return proba * self.R(p, i) - (1 - proba) * self.d[i] - self.r * (Ks[..., i] + Kp[..., i]) - self.w * (Ls[..., i] + Lp[..., i])
 
     def get_func(self, history, i):
         hist = history.copy()
