@@ -1,29 +1,33 @@
 #include <iostream>
 #include "prodFunc.hpp"
 #include "problem.hpp"
+#include "solve.hpp"
 
 int main() {
     ProdFunc prodFunc(
-        Eigen::Array3d(1.0, 1.0, 1.0),
-        Eigen::Array3d(0.5, 0.5, 0.5),
-        Eigen::Array3d(1.0, 1.0, 1.0),
-        Eigen::Array3d(0.5, 0.5, 0.5),
-        Eigen::Array3d(0.1, 0.2, 0.3)
+        Eigen::Array2d(1.0, 1.0),
+        Eigen::Array2d(0.5, 0.5),
+        Eigen::Array2d(1.0, 1.0),
+        Eigen::Array2d(0.5, 0.5),
+        Eigen::Array2d(0.0, 0.0)
     );
 
-    Problem problem(Eigen::Array3d(1.0, 1.0, 1.0), 0.01, prodFunc);
+    Problem problem(Eigen::Array2d(1.0, 1.0), 0.01, prodFunc);
 
-    std::vector<Eigen::ArrayXXd> history;
-    Eigen::Array<double, 3, 2> hist0;
-    hist0 << 1.0, 1.0,
-             2.0, 2.0,
-             3.0, 3.0;
-    history.push_back(hist0);
+    Eigen::Array<double, 2, 2> last_strat;
+    last_strat << 1.0, 1.0,
+                  0.1, 0.1;
     
 
-    ProblemJac jac(problem, 0, history);
+    Objective obj(problem, 0, last_strat);
 
-    std::cout << jac.get(Eigen::Array2d(1.0, 1.5)) << '\n';
+    std::cout << obj.jac(Eigen::Array2d(1.0, 1.5)) << '\n';
+
+    auto varSet = std::make_shared<VarSet>("vars", 2);
+    auto objective = std::make_shared<IfoptObjective>("obj", "vars", obj);
+    IfoptProblem ifoptProblem(varSet, objective);
+
+    std::cout << ifoptProblem.solve() << '\n';
 
     return 0;
 }

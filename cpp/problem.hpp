@@ -22,7 +22,7 @@ public:
     ) const;
 
     Eigen::ArrayXXd solve_single(
-        const std::vector<Eigen::ArrayXXd> history
+        const Eigen::ArrayXXd& last_strat
     ) {
         // do something
     }
@@ -38,28 +38,13 @@ public:
     Objective(
         const Problem& problem,
         int i,
-        std::vector<Eigen::ArrayXXd> history
+        Eigen::ArrayXXd last_strat
     );
 
-    double get(const Eigen::Array2d& x);
+    double f(const Eigen::Array2d& x);
+    Eigen::Array2d jac(const Eigen::Array2d& x);
 
-    std::vector<Eigen::ArrayXXd> history;
-    const int i;
-    const Problem& problem;
-};
-
-
-class ProblemJac {
-public:
-    ProblemJac(
-        const Problem& problem,
-        int i,
-        std::vector<Eigen::ArrayXXd> history
-    );
-
-    Eigen::Array2d get(const Eigen::Array2d& x);
-
-    std::vector<Eigen::ArrayXXd> history;
+    Eigen::ArrayXXd last_strat;
     const int i;
     const Problem& problem;
     const ProdFuncJac prodJac;

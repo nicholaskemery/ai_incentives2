@@ -1,7 +1,6 @@
 #include <cmath>
 #include "prodFunc.hpp"
 
-#include <iostream>
 
 ProdFuncJac::ProdFuncJac(
     const ProdFunc& prodFunc,
