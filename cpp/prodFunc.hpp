@@ -26,22 +26,14 @@ public:
         const Eigen::ArrayXd& Kp
     ) const;
 
+    Eigen::Array22d jac_single_i(
+        int i,
+        const Eigen::ArrayXd& x
+    ) const;
+
     Eigen::ArrayXd A;
     Eigen::ArrayXd B;
     Eigen::ArrayXd alpha;
     Eigen::ArrayXd beta;
     Eigen::ArrayXd theta;
-};
-
-
-class ProdFuncJac {
-public:
-    ProdFuncJac(const ProdFunc& prodFunc, int i);
-
-    Eigen::Array22d get(
-        const Eigen::Array2d& x
-    ) const;
-
-    const ProdFunc& prodFunc;
-    const int i;
 };

@@ -21,7 +21,13 @@ int main() {
 
     Objective obj(problem, 0, last_strat);
 
-    std::cout << obj.jac(Eigen::Array2d(1.0, 1.5)) << '\n';
+    Eigen::Array2d x(1.0, 1.5);
+
+    auto [s, p] = prodFunc.f_single_i(0, x(0), x(1));
+    std::cout << "prodfunc: " << s << ' ' << p << '\n';
+
+    std::cout << "f: " << obj.f(x) << '\n';
+    std::cout << "jac: " << obj.jac(x) << '\n';
 
     auto varSet = std::make_shared<VarSet>("vars", 2);
     auto objective = std::make_shared<IfoptObjective>("obj", "vars", obj);

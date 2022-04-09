@@ -21,12 +21,6 @@ public:
         const Eigen::ArrayXd& Kp
     ) const;
 
-    Eigen::ArrayXXd solve_single(
-        const Eigen::ArrayXXd& last_strat
-    ) {
-        // do something
-    }
-
     Eigen::ArrayXd d;
     double r;
     ProdFunc prodFunc;
@@ -47,5 +41,4 @@ public:
     Eigen::ArrayXXd last_strat;
     const int i;
     const Problem& problem;
-    const ProdFuncJac prodJac;
 };

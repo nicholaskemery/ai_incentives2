@@ -8,3 +8,6 @@ find_package(Eigen3 REQUIRED)
 find_package(ifopt REQUIRED)
 target_link_libraries(lib Eigen3::Eigen ifopt::ifopt_ipopt)
 target_link_libraries(main lib)
+
+set_property(TARGET lib PROPERTY CXX_STANDARD 17)
+set_property(TARGET main PROPERTY CXX_STANDARD 17)

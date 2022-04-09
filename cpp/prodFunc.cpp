@@ -2,26 +2,6 @@
 #include "prodFunc.hpp"
 
 
-ProdFuncJac::ProdFuncJac(
-    const ProdFunc& prodFunc,
-    int i
-) : prodFunc(prodFunc), i(i) {}
-
-Eigen::Array22d ProdFuncJac::get(
-    const Eigen::Array2d& x
-) const {
-    auto [p, s] = prodFunc.f_single_i(i, x(0), x(1));
-    double s_mult = prodFunc.A(i) * prodFunc.alpha(i) * std::pow(s / prodFunc.A(i), 1 - 1 / prodFunc.alpha(i));
-    double p_mult = prodFunc.B(i) * prodFunc.beta(i) * std::pow(p / prodFunc.B(i), 1 - 1 / prodFunc.beta(i));
-    double out00 = s_mult * std::pow(p, -prodFunc.theta(i));
-    double out01 = -prodFunc.theta(i) * s * std::pow(p, -prodFunc.theta(i) - 1) * p_mult;
-    Eigen::Array22d out;
-    out << out00, out01,
-           0.0,   p_mult;
-    return out;
-}
-
-
 ProdFunc::ProdFunc(
     Eigen::ArrayXd A,
     Eigen::ArrayXd alpha,
@@ -37,7 +17,7 @@ std::tuple<double, double> ProdFunc::f_single_i(
 ) const {
     double p = B(i) * std::pow(Kp, beta(i));
     double s = A(i) * std::pow(Ks, alpha(i)) * std::pow(p, -theta(i));
-    return {p, s};
+    return {s, p};
 }
 
 std::tuple<Eigen::ArrayXd, Eigen::ArrayXd> ProdFunc::f(
@@ -46,5 +26,20 @@ std::tuple<Eigen::ArrayXd, Eigen::ArrayXd> ProdFunc::f(
 ) const {
     Eigen::ArrayXd p = B * Kp.pow(beta);
     Eigen::ArrayXd s = A * Ks.pow(alpha) * p.pow(-theta);
-    return {p, s};
+    return {s, p};
+}
+
+Eigen::Array22d ProdFunc::jac_single_i(
+    int i,
+    const Eigen::ArrayXd& x
+) const {
+    auto [s, p] = f_single_i(i, x(0), x(1));
+    double s_mult = A(i) * alpha(i) * std::pow(s / A(i), 1.0 - 1.0 / alpha(i));
+    double p_mult = B(i) * beta(i) * std::pow(p / B(i), 1.0 - 1.0 / beta(i));
+    double out00 = s_mult * std::pow(p, -theta(i));
+    double out01 = -theta(i) * s * std::pow(p, -theta(i) - 1.0) * p_mult;
+    Eigen::Array22d out;
+    out << out00, out01,
+           0.0,   p_mult;
+    return out;
 }
