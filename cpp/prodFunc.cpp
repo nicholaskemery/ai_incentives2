@@ -1,5 +1,6 @@
 #include <cmath>
 #include "prodFunc.hpp"
+#include <iostream>
 
 
 ProdFunc::ProdFunc(
@@ -8,7 +9,15 @@ ProdFunc::ProdFunc(
     Eigen::ArrayXd B,
     Eigen::ArrayXd beta,
     Eigen::ArrayXd theta
-) : A(A), alpha(alpha), B(B), beta(beta), theta(theta) {}
+) : A(A), alpha(alpha), B(B), beta(beta), theta(theta) {
+    n_players = A.size();
+    assert(
+        n_players == alpha.size()
+        && n_players == B.size()
+        && n_players == beta.size()
+        && n_players == theta.size()
+    );
+}
 
 std::tuple<double, double> ProdFunc::f_single_i(
     int i,

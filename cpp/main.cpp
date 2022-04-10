@@ -12,28 +12,31 @@ int main() {
         Eigen::Array2d(0.0, 0.0)
     );
 
-    Problem problem(Eigen::Array2d(1.0, 1.0), 0.01, prodFunc);
+    std::vector<Problem> problems = {
+        Problem(Eigen::Array2d(1.0, 1.0), 0.01, prodFunc),
+        Problem(Eigen::Array2d(0.5, 0.5), 0.01, prodFunc)
+    };
 
     Eigen::Array<double, 2, 2> last_strat;
     last_strat << 1.0, 1.0,
-                  0.1, 0.1;
+                  1.0, 1.0;
     
 
-    Objective obj(problem, 0, last_strat);
-
-    Eigen::Array2d x(1.0, 1.5);
-
-    auto [s, p] = prodFunc.f_single_i(0, x(0), x(1));
-    std::cout << "prodfunc: " << s << ' ' << p << '\n';
-
-    std::cout << "f: " << obj.f(x) << '\n';
-    std::cout << "jac: " << obj.jac(x) << '\n';
-
-    auto varSet = std::make_shared<VarSet>("vars", 2);
-    auto objective = std::make_shared<IfoptObjective>("obj", "vars", obj);
-    IfoptProblem ifoptProblem(varSet, objective);
-
-    std::cout << ifoptProblem.solve() << '\n';
+    std::vector<Eigen::ArrayX2d> solutions;
+    for (const Problem& problem : problems) {
+        solutions.push_back(
+            solve(
+                problem,
+                100,
+                0.001,
+                last_strat
+            )
+        );
+    }
+     
+    for (const auto& s : solutions) {
+        std::cout << s << '\n';
+    }
 
     return 0;
 }

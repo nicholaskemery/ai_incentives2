@@ -15,7 +15,10 @@ Problem::Problem(
     Eigen::ArrayXd d,
     double r,
     ProdFunc prodFunc
-) : d(d), r(r), prodFunc(prodFunc) {}
+) : d(d), r(r), prodFunc(prodFunc) {
+    n_players = d.size();
+    assert(n_players == prodFunc.n_players);
+}
 
 double Problem::net_payoff(
     int i,
@@ -32,7 +35,7 @@ Objective::Objective(
     const Problem& problem,
     int i,
     // copy of last_strat is intentional
-    Eigen::ArrayXXd last_strat
+    Eigen::ArrayX2d last_strat
 ) : problem(problem), i(i), last_strat(last_strat) {}
 
 double Objective::f(const Eigen::Array2d& x) {

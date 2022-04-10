@@ -1,8 +1,8 @@
 #pragma once
 
 #include <Eigen/Eigen>
-#include <vector>
 #include <utility>
+#include <cassert>
 
 #include "prodFunc.hpp"
 
@@ -24,6 +24,7 @@ public:
     Eigen::ArrayXd d;
     double r;
     ProdFunc prodFunc;
+    int n_players;
 };
 
 
@@ -32,13 +33,13 @@ public:
     Objective(
         const Problem& problem,
         int i,
-        Eigen::ArrayXXd last_strat
+        Eigen::ArrayX2d last_strat
     );
 
     double f(const Eigen::Array2d& x);
     Eigen::Array2d jac(const Eigen::Array2d& x);
 
-    Eigen::ArrayXXd last_strat;
+    Eigen::ArrayX2d last_strat;
     const int i;
     const Problem& problem;
 };

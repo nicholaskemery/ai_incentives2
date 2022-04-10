@@ -1,8 +1,8 @@
 # pragma once
 
 #include <Eigen/Eigen>
-#include <vector>
 #include <utility>
+#include <cassert>
 
 
 class ProdFunc {
@@ -36,4 +36,5 @@ public:
     Eigen::ArrayXd alpha;
     Eigen::ArrayXd beta;
     Eigen::ArrayXd theta;
+    int n_players;
 };
