@@ -21,6 +21,11 @@ public:
         const Eigen::ArrayXd& Kp
     ) const;
 
+    Eigen::ArrayXd get_all_net_payoffs(
+        const Eigen::ArrayXd& Ks,
+        const Eigen::ArrayXd& Kp
+    );
+
     Eigen::ArrayXd d;
     double r;
     ProdFunc prodFunc;

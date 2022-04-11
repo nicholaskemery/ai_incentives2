@@ -16,3 +16,4 @@ set_property(TARGET lib PROPERTY CXX_STANDARD 17)
 
 add_library(pybindings SHARED pybindings.hpp pybindings.cpp)
 target_link_libraries(pybindings lib)
+set_property(TARGET pybindings PROPERTY CXX_STANDARD 17)

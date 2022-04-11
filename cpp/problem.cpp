@@ -30,6 +30,20 @@ double Problem::net_payoff(
     return proba * R(i, p) - (1 - proba) * d(i)  - r * (Ks(i) + Kp(i));
 }
 
+Eigen::ArrayXd Problem::get_all_net_payoffs(
+    const Eigen::ArrayXd& Ks,
+    const Eigen::ArrayXd& Kp
+) {
+    auto [s, p] = prodFunc.f(Ks, Kp);
+    double proba = (s / (1 + s)).prod();
+    std::vector<double> payoffs;
+    payoffs.reserve(n_players);
+    for (int i = 0; i < n_players; i++) {
+        payoffs.push_back(proba * R(i, p) - (1 - proba) * d(i) - r * (Ks(i) + Kp(i)));
+    }
+    return Eigen::Map<Eigen::ArrayXd>(payoffs.data(), n_players);
+}
+
 
 Objective::Objective(
     const Problem& problem,

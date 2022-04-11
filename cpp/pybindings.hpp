@@ -29,4 +29,31 @@ extern "C" {
         double exit_tol,
         double* result
     );
+
+    void prod_F(
+        int n_persons,
+        double* A,
+        double* alpha,
+        double* B,
+        double* beta,
+        double* theta,
+        double* Ks,
+        double* Kp,
+        double* s_out,
+        double* p_out
+    );
+
+    void get_payoffs(
+        int n_persons,
+        double* A,
+        double* alpha,
+        double* B,
+        double* beta,
+        double* theta,
+        double* d,
+        double r,
+        double* Ks,
+        double* Kp,
+        double* payoffs_out
+    );
 }
