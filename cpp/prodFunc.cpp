@@ -1,6 +1,5 @@
 #include <cmath>
 #include "prodFunc.hpp"
-#include <iostream>
 
 
 ProdFunc::ProdFunc(

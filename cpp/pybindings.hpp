@@ -56,4 +56,35 @@ extern "C" {
         double* Kp,
         double* payoffs_out
     );
+
+    void run_variable_r(
+        int n_persons,
+        double* A,
+        double* alpha,
+        double* B,
+        double* beta,
+        double* theta,
+        double* d,
+        double r0,
+        double c,
+        int max_iters,
+        double exit_tol,
+        double ifopt_tol,
+        double* result
+    );
+
+    void get_payoffs_variable_r(
+        int n_persons,
+        double* A,
+        double* alpha,
+        double* B,
+        double* beta,
+        double* theta,
+        double* d,
+        double r0,
+        double c,
+        double* Ks,
+        double* Kp,
+        double* payoffs_out
+    );
 }

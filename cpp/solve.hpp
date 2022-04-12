@@ -3,8 +3,8 @@
 #include <memory>
 #include <vector>
 #include <cassert>
-#include <thread>
-#include <mutex>
+// #include <thread>
+// #include <mutex>
 #include <Eigen/Eigen>
 #include <ifopt/variable_set.h>
 #include <ifopt/constraint_set.h>
@@ -14,9 +14,11 @@
 
 #include "problem.hpp"
 
-const auto PROCESSOR_COUNT = std::thread::hardware_concurrency();
+// const auto PROCESSOR_COUNT = std::thread::hardware_concurrency();
 
 using SparseJacobian = Eigen::SparseMatrix<double, Eigen::RowMajor>;
+
+const double DEFAULT_IFOPT_TOL = 0.001;
 
 
 class VarSet : public ifopt::VariableSet {
@@ -50,7 +52,7 @@ class IfoptObjective : public ifopt::CostTerm {
     // note that this actually is framed in terms of a function we want to _maximize_, not minimize
     // since in economics that's typically what we're trying to do
 public:
-    IfoptObjective(const std::string& name, const std::string& varName, Objective& objectiveFunc);
+    IfoptObjective(const std::string& name, const std::string& varName, BaseObjective* objectiveFunc);
 
     double GetCost() const override;
 
@@ -60,11 +62,12 @@ public:
 
 private:
     std::string varName;
-    Objective& objectiveFunc;
+    BaseObjective* objectiveFunc;
 };
 
 // have to use shared pointers in what follows since that's what ifopt expects
-void configure_to_default_solver(std::shared_ptr<ifopt::IpoptSolver> solver);
+
+void configure_solver(std::shared_ptr<ifopt::IpoptSolver> solver, double tol);
 
 
 class IfoptProblem {
@@ -73,7 +76,8 @@ class IfoptProblem {
 public:
     IfoptProblem(
         std::shared_ptr<VarSet> varSet,
-        std::shared_ptr<IfoptObjective> objective
+        std::shared_ptr<IfoptObjective> objective,
+        double tol
     );
 
     Eigen::ArrayXd solve();
@@ -88,20 +92,23 @@ private:
 
 Eigen::ArrayX2d solve_single(
     const Problem& problem,
-    const Eigen::ArrayX2d& current_guess
+    const Eigen::ArrayX2d& current_guess,
+    double ifopt_tol
+);
+
+Eigen::ArrayX2d solve(
+    const Problem& problem,
+    const Eigen::ArrayX2d& start_guess,
+    int max_iters,
+    double exit_tol,
+    double ifopt_tol = DEFAULT_IFOPT_TOL
 );
 
 Eigen::ArrayX2d solve(
     const Problem& problem,
     int max_iters,
     double exit_tol,
-    const Eigen::ArrayX2d& start_guess
-);
-
-Eigen::ArrayX2d solve(
-    const Problem& problem,
-    int max_iters,
-    double exit_tol
+    double ifopt_tol = DEFAULT_IFOPT_TOL
 ); // uses default starting guess
 
 
@@ -134,3 +141,26 @@ Eigen::ArrayX2d solve(
 //     int n_problems;
 //     std::mutex my_mutex;
 // };
+
+// duplication in following functions could be eliminated with better class inheritance, but whatever; it works as is
+
+Eigen::ArrayX2d solve_single(
+    const VariableRProblem* problem,
+    const Eigen::ArrayX2d& current_guess,
+    double ifopt_tol
+);
+
+Eigen::ArrayX2d solve(
+    const VariableRProblem* problem,
+    const Eigen::ArrayX2d& start_guess,
+    int max_iters,
+    double exit_tol,
+    double ifopt_tol = DEFAULT_IFOPT_TOL
+);
+
+Eigen::ArrayX2d solve(
+    const VariableRProblem* problem,
+    int max_iters,
+    double exit_tol,
+    double ifopt_tol = DEFAULT_IFOPT_TOL
+); // uses default starting guess

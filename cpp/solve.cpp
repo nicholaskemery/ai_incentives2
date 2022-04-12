@@ -32,7 +32,7 @@ VarSet::VarSet(
 IfoptObjective::IfoptObjective(
     const std::string& name,
     const std::string& varName,
-    Objective& objectiveFunc
+    BaseObjective* objectiveFunc
 ) : ifopt::CostTerm(name),
     varName(varName),
     objectiveFunc(objectiveFunc)
@@ -41,7 +41,7 @@ IfoptObjective::IfoptObjective(
 double IfoptObjective::GetCost() const {
     Eigen::ArrayXd x = GetVariables()->GetComponent(varName)->GetValues().array();
     // notice we return the negative objectiveFunc since we're trying to maximize objective
-    return objectiveFunc.f(x);
+    return objectiveFunc->f(x);
 }
 
 void IfoptObjective::FillJacobianBlock(
@@ -50,7 +50,7 @@ void IfoptObjective::FillJacobianBlock(
 ) const {
     if (var_set == varName) {
         Eigen::ArrayXd x = GetVariables()->GetComponent(varName)->GetValues().array();
-        Eigen::Array2d jac_ = objectiveFunc.jac(x);
+        Eigen::Array2d jac_ = objectiveFunc->jac(x);
         jac.coeffRef(0, 0) = jac_(0);
         jac.coeffRef(0, 1) = jac_(1);
     }
@@ -61,24 +61,29 @@ void IfoptObjective::FillJacobianBlock(SparseJacobian& jac) const {
 }
 
 
-void configure_to_default_solver(std::shared_ptr<ifopt::IpoptSolver> solver) {
+void configure_solver(std::shared_ptr<ifopt::IpoptSolver> solver, double tol) {
     // use MUMPS as linear solver
     // if you have the HSL solvers, you should use those instead
     solver->SetOption("linear_solver", "mumps");
     // require jacobians to be pre-provided
     solver->SetOption("jacobian_approximation", "exact");
+    // basically only prints status if something goes wrong
     solver->SetOption("print_level", 1);
+    // suppresses ipopt info message
     solver->SetOption("sb", "yes");
+    // set solver tolerance
+    solver->SetOption("tol", tol);
 }
 
 
 IfoptProblem::IfoptProblem(
     std::shared_ptr<VarSet> varSet,
-    std::shared_ptr<IfoptObjective> objective
+    std::shared_ptr<IfoptObjective> objective,
+    double tol
 ) {
     problem.AddVariableSet(varSet);
     problem.AddCostSet(objective);
-    configure_to_default_solver(solver);
+    configure_solver(solver, tol);
 }
 
 Eigen::ArrayXd IfoptProblem::solve() {
@@ -92,14 +97,15 @@ void IfoptProblem::changeSolver(std::shared_ptr<ifopt::IpoptSolver> newSolver) {
 
 Eigen::ArrayX2d solve_single(
     const Problem& problem,
-    const Eigen::ArrayX2d& current_guess
+    const Eigen::ArrayX2d& current_guess,
+    double ifopt_tol
 ) {
     Eigen::ArrayX2d new_strat(problem.n_players, 2);
     for (int i = 0; i < problem.n_players; i++) {
         Objective objective(problem, i, current_guess);
         auto varSet = std::make_shared<VarSet>("vars", 2, current_guess.row(i));
-        auto ifoptObjective = std::make_shared<IfoptObjective>("obj", "vars", objective);
-        IfoptProblem ifoptProblem(varSet, ifoptObjective);
+        auto ifoptObjective = std::make_shared<IfoptObjective>("obj", "vars", &objective);
+        IfoptProblem ifoptProblem(varSet, ifoptObjective, ifopt_tol);
         new_strat.row(i) = ifoptProblem.solve();
     }
     return new_strat;
@@ -107,13 +113,14 @@ Eigen::ArrayX2d solve_single(
 
 Eigen::ArrayX2d solve(
     const Problem& problem,
+    const Eigen::ArrayX2d& start_guess,
     int max_iters,
     double exit_tol,
-    const Eigen::ArrayX2d& start_guess
+    double ifopt_tol
 ) {
     Eigen::ArrayX2d current_guess = start_guess;
     for (int i = 0; i < max_iters; i++) {
-        Eigen::ArrayX2d new_guess = solve_single(problem, current_guess);
+        Eigen::ArrayX2d new_guess = solve_single(problem, current_guess, ifopt_tol);
         if (((new_guess - current_guess) / current_guess).abs().maxCoeff() < exit_tol) {
             std::cout << "Exited on iteration " << i << '\n';
             return new_guess;
@@ -127,14 +134,16 @@ Eigen::ArrayX2d solve(
 Eigen::ArrayX2d solve(
     const Problem& problem,
     int max_iters,
-    double exit_tol
+    double exit_tol,
+    double ifopt_tol
 ) {
     return solve(
         problem,
+        // default starting guess is just 1.0 for everything
+        Eigen::ArrayX2d::Constant(problem.n_players, 2, 1.0),
         max_iters,
         exit_tol,
-        // default starting guess is just 1.0 for everything
-        Eigen::ArrayX2d::Constant(problem.n_players, 2, 1.0)
+        ifopt_tol
     );
 }
 
@@ -204,3 +213,55 @@ Eigen::ArrayX2d solve(
 // ) {
 //     return MultiSolver(problems, max_iters, exit_tol, start_guess).run();
 // }
+
+Eigen::ArrayX2d solve_single(
+    const VariableRProblem* problem,
+    const Eigen::ArrayX2d& current_guess,
+    double ifopt_tol
+) {
+    Eigen::ArrayX2d new_strat(problem->n_players, 2);
+    for (int i = 0; i < problem->n_players; i++) {
+        VariableRObjective objective(problem, i, current_guess);
+        auto varSet = std::make_shared<VarSet>("vars", 2, current_guess.row(i));
+        auto ifoptObjective = std::make_shared<IfoptObjective>("obj", "vars", &objective);
+        IfoptProblem ifoptProblem(varSet, ifoptObjective, ifopt_tol);
+        new_strat.row(i) = ifoptProblem.solve();
+    }
+    return new_strat;
+}
+
+Eigen::ArrayX2d solve(
+    const VariableRProblem* problem,
+    const Eigen::ArrayX2d& start_guess,
+    int max_iters,
+    double exit_tol,
+    double ifopt_tol
+) {
+    Eigen::ArrayX2d current_guess = start_guess;
+    for (int i = 0; i < max_iters; i++) {
+        Eigen::ArrayX2d new_guess = solve_single(problem, current_guess, ifopt_tol);
+        if (((new_guess - current_guess) / current_guess).abs().maxCoeff() < exit_tol) {
+            std::cout << "Exited on iteration " << i << '\n';
+            return new_guess;
+        }
+        current_guess = new_guess;
+    }
+    std::cout << "Reached max iterations\n";
+    return current_guess;
+}
+
+Eigen::ArrayX2d solve(
+    const VariableRProblem* problem,
+    int max_iters,
+    double exit_tol,
+    double ifopt_tol
+) {
+    return solve(
+        problem,
+        // default starting guess is just 1.0 for everything
+        Eigen::ArrayX2d::Constant(problem->n_players, 2, 1.0),
+        max_iters,
+        exit_tol,
+        ifopt_tol
+    );
+}

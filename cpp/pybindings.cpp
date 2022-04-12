@@ -34,7 +34,6 @@ void run(
     double* result
 ) {
     ProdFunc prodFunc = build_ProdFunc(n_persons, A, alpha, B, beta, theta);
-    Eigen::ArrayXd d_ = Eigen::Map<Eigen::ArrayXd>(d, n_persons);
     Problem problem(
         Eigen::Map<Eigen::ArrayXd>(d, n_persons),
         Eigen::Map<Eigen::ArrayXd>(r, n_persons),
@@ -89,6 +88,62 @@ void get_payoffs(
         Eigen::Map<Eigen::ArrayXd>(d, n_persons),
         Eigen::Map<Eigen::ArrayXd>(r, n_persons),
         prodFunc
+    ).get_all_net_payoffs(
+        Ks_, Kp_
+    );
+    Eigen::Map<Eigen::ArrayXd>(payoffs_out, n_persons) = payoffs;
+}
+
+
+void run_variable_r(
+    int n_persons,
+    double* A,
+    double* alpha,
+    double* B,
+    double* beta,
+    double* theta,
+    double* d,
+    double r0,
+    double c,
+    int max_iters,
+    double exit_tol,
+    double ifopt_tol,
+    double* result
+) {
+    ProdFunc prodFunc = build_ProdFunc(n_persons, A, alpha, B, beta, theta);
+    DecayingExpRProblem problem(
+        Eigen::Map<Eigen::ArrayXd>(d, n_persons),
+        prodFunc,
+        r0,
+        c
+    );
+    Eigen::ArrayX2d solution = solve(&problem, max_iters, exit_tol, ifopt_tol);
+    Eigen::Map<Eigen::ArrayX2d>(result, solution.rows(), solution.cols()) = solution;
+}
+
+
+void get_payoffs_variable_r(
+    int n_persons,
+    double* A,
+    double* alpha,
+    double* B,
+    double* beta,
+    double* theta,
+    double* d,
+    double r0,
+    double c,
+    double* Ks,
+    double* Kp,
+    double* payoffs_out
+) {
+    ProdFunc prodFunc = build_ProdFunc(n_persons, A, alpha, B, beta, theta);
+    Eigen::ArrayXd Ks_ = Eigen::Map<Eigen::ArrayXd>(Ks, n_persons);
+    Eigen::ArrayXd Kp_ = Eigen::Map<Eigen::ArrayXd>(Kp, n_persons);
+    Eigen::ArrayXd payoffs = DecayingExpRProblem(
+        Eigen::Map<Eigen::ArrayXd>(d, n_persons),
+        prodFunc,
+        r0,
+        c
     ).get_all_net_payoffs(
         Ks_, Kp_
     );
