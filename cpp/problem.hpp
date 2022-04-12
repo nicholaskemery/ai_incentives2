@@ -11,7 +11,7 @@ class Problem {
 public:
     Problem(
         Eigen::ArrayXd d,
-        double r,
+        Eigen::ArrayXd r,
         ProdFunc prodFunc
     );
 
@@ -27,7 +27,7 @@ public:
     );
 
     Eigen::ArrayXd d;
-    double r;
+    Eigen::ArrayXd r;
     ProdFunc prodFunc;
     int n_players;
 };

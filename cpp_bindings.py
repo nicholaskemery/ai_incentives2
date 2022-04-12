@@ -15,7 +15,7 @@ lib.run.argtypes = [
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # beta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # theta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # d
-    ctypes.c_double,  # r
+    ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # r
     ctypes.c_int,  # max_iters
     ctypes.c_double,  # exit_tol
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS')  # result
@@ -30,7 +30,7 @@ def solve(
     beta: np.ndarray,
     theta: np.ndarray,
     d: np.ndarray,
-    r: float,
+    r: np.ndarray,
     max_iters: int,
     exit_tol: float
 ) -> np.ndarray:
@@ -78,7 +78,7 @@ lib.get_payoffs.argtypes = [
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # beta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # theta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # d
-    ctypes.c_double,  # r
+    ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # r
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # Ks
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # Kp
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS')  # payoffs_out
@@ -93,7 +93,7 @@ def get_payoffs(
     beta: np.ndarray,
     theta: np.ndarray,
     d: np.ndarray,
-    r: float,
+    r: np.ndarray,
     Ks: np.ndarray,
     Kp: np.ndarray
 ):
@@ -115,7 +115,7 @@ if __name__ == '__main__':
     theta = ones * 0.0
 
     d = ones * 1.0
-    r = 0.01
+    r = ones * 0.01
     max_iters = 100
     exit_tol = 0.001
 

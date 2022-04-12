@@ -67,7 +67,8 @@ void configure_to_default_solver(std::shared_ptr<ifopt::IpoptSolver> solver) {
     solver->SetOption("linear_solver", "mumps");
     // require jacobians to be pre-provided
     solver->SetOption("jacobian_approximation", "exact");
-    solver->SetOption("print_level", 0);
+    solver->SetOption("print_level", 1);
+    solver->SetOption("sb", "yes");
 }
 
 

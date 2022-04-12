@@ -24,7 +24,7 @@ extern "C" {
         double* beta,
         double* theta,
         double* d,
-        double r,
+        double* r,
         int max_iters,
         double exit_tol,
         double* result
@@ -51,7 +51,7 @@ extern "C" {
         double* beta,
         double* theta,
         double* d,
-        double r,
+        double* r,
         double* Ks,
         double* Kp,
         double* payoffs_out

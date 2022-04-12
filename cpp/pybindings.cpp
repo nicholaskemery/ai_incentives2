@@ -1,5 +1,4 @@
 #include <Eigen/Eigen>
-#include <vector>
 #include "pybindings.hpp"
 
 
@@ -29,7 +28,7 @@ void run(
     double* beta,
     double* theta,
     double* d,
-    double r,
+    double* r,
     int max_iters,
     double exit_tol,
     double* result
@@ -38,7 +37,7 @@ void run(
     Eigen::ArrayXd d_ = Eigen::Map<Eigen::ArrayXd>(d, n_persons);
     Problem problem(
         Eigen::Map<Eigen::ArrayXd>(d, n_persons),
-        r,
+        Eigen::Map<Eigen::ArrayXd>(r, n_persons),
         prodFunc
     );
 
@@ -78,7 +77,7 @@ void get_payoffs(
     double* beta,
     double* theta,
     double* d,
-    double r,
+    double* r,
     double* Ks,
     double* Kp,
     double* payoffs_out
@@ -88,7 +87,7 @@ void get_payoffs(
     Eigen::ArrayXd Kp_ = Eigen::Map<Eigen::ArrayXd>(Kp, n_persons);
     Eigen::ArrayXd payoffs = Problem(
         Eigen::Map<Eigen::ArrayXd>(d, n_persons),
-        r,
+        Eigen::Map<Eigen::ArrayXd>(r, n_persons),
         prodFunc
     ).get_all_net_payoffs(
         Ks_, Kp_

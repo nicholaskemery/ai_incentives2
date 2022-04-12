@@ -13,7 +13,7 @@ double R_deriv(int i, const Eigen::ArrayXd& p) {
 
 Problem::Problem(
     Eigen::ArrayXd d,
-    double r,
+    Eigen::ArrayXd r,
     ProdFunc prodFunc
 ) : d(d), r(r), prodFunc(prodFunc) {
     n_players = d.size();
@@ -27,7 +27,7 @@ double Problem::net_payoff(
 ) const {
     auto [s, p] = prodFunc.f(Ks, Kp);
     double proba = (s / (1 + s)).prod();
-    return proba * R(i, p) - (1 - proba) * d(i)  - r * (Ks(i) + Kp(i));
+    return proba * R(i, p) - (1 - proba) * d(i)  - r(i) * (Ks(i) + Kp(i));
 }
 
 Eigen::ArrayXd Problem::get_all_net_payoffs(
@@ -39,7 +39,7 @@ Eigen::ArrayXd Problem::get_all_net_payoffs(
     std::vector<double> payoffs;
     payoffs.reserve(n_players);
     for (int i = 0; i < n_players; i++) {
-        payoffs.push_back(proba * R(i, p) - (1 - proba) * d(i) - r * (Ks(i) + Kp(i)));
+        payoffs.push_back(proba * R(i, p) - (1 - proba) * d(i) - r(i) * (Ks(i) + Kp(i)));
     }
     return Eigen::Map<Eigen::ArrayXd>(payoffs.data(), n_players);
 }
@@ -89,11 +89,10 @@ Eigen::Array2d Objective::jac(const Eigen::Array2d& x) {
 
     return Eigen::Array2d(
         -(
-            proba_ks * (R_ + problem.d(i)) + proba * R_deriv_ * prod_jac(1,0) - problem.r
+            proba_ks * (R_ + problem.d(i)) + proba * R_deriv_ * prod_jac(1,0) - problem.r(i)
         ),
         -(
-            proba_kp * (R_ + problem.d(i)) + proba * R_deriv_ * prod_jac(1, 1) - problem.r
+            proba_kp * (R_ + problem.d(i)) + proba * R_deriv_ * prod_jac(1, 1) - problem.r(i)
         )
     );
 }
-
