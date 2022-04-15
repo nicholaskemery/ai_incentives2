@@ -24,9 +24,15 @@ extern "C" {
         double* beta,
         double* theta,
         double* d,
-        double* r,
+        double r,
+        double W,
+        double L,
+        double a_w,
+        double a_l,
         int max_iters,
         double exit_tol,
+        int ipopt_max_iter,
+        double ipopt_tol,
         double* result
     );
 
@@ -51,7 +57,11 @@ extern "C" {
         double* beta,
         double* theta,
         double* d,
-        double* r,
+        double r,
+        double W,
+        double L,
+        double a_w,
+        double a_l,
         double* Ks,
         double* Kp,
         double* payoffs_out
@@ -69,7 +79,8 @@ extern "C" {
         double c,
         int max_iters,
         double exit_tol,
-        double ifopt_tol,
+        int ipopt_max_iter,
+        double ipopt_tol,
         double* result
     );
 

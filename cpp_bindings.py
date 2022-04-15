@@ -15,9 +15,15 @@ lib.run.argtypes = [
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # beta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # theta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # d
-    ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # r
+    ctypes.c_double,  # r
+    ctypes.c_double,  # W
+    ctypes.c_double,  # L
+    ctypes.c_double,  # a_w
+    ctypes.c_double,  # a_l
     ctypes.c_int,  # max_iters
     ctypes.c_double,  # exit_tol
+    ctypes.c_int,  # ipopt_max_iter
+    ctypes.c_double,  # ipopt_tol
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS')  # result
 ]
 lib.run.restype = None
@@ -30,13 +36,24 @@ def solve(
     beta: np.ndarray,
     theta: np.ndarray,
     d: np.ndarray,
-    r: np.ndarray,
-    max_iters: int,
-    exit_tol: float = 0.001
+    r: float,
+    W: float = 1.0,
+    L: float = 0.0,
+    a_w: float = 0.0,
+    a_l: float = 0.0,
+    max_iters: int = 200,
+    exit_tol: float = 0.001,
+    ipopt_max_iters: int = 200,
+    ipopt_tol: float = 0.001
 ) -> np.ndarray:
-    assert(n_persons == len(A) == len(alpha) == len(B) == len(beta) == len(theta) == len(d) == len(r))
+    assert(n_persons == len(A) == len(alpha) == len(B) == len(beta) == len(theta) == len(d))
     result = np.empty((2, n_persons))
-    lib.run(n_persons, A, alpha, B, beta, theta, d, r, max_iters, exit_tol, result)
+    lib.run(
+        n_persons, A, alpha, B, beta, theta, d, r,
+        W, L, a_w, a_l,
+        max_iters, exit_tol, ipopt_max_iters, ipopt_tol,
+        result
+    )
     return result.T
 
 
@@ -56,18 +73,18 @@ lib.prod_F.restype = None
 
 def prod_F(
     n_persons: int,
+    Ks: np.ndarray,
+    Kp: np.ndarray,
     A: np.ndarray,
     alpha: np.ndarray,
     B: np.ndarray,
     beta: np.ndarray,
     theta: np.ndarray,
-    Ks: np.ndarray,
-    Kp: np.ndarray
 ) -> np.ndarray:
     assert(n_persons == len(A) == len(alpha) == len(B) == len(beta) == len(theta) == len(Ks) == len(Kp))
     s_out, p_out = np.empty(n_persons), np.empty(n_persons)
     lib.prod_F(n_persons, A, alpha, B, beta, theta, Ks, Kp, s_out, p_out)
-    return np.stack((s_out, p_out), 1)
+    return s_out, p_out
 
 
 lib.get_payoffs.argtypes = [
@@ -78,7 +95,11 @@ lib.get_payoffs.argtypes = [
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # beta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # theta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # d
-    ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # r
+    ctypes.c_double,  # r
+    ctypes.c_double,  # W
+    ctypes.c_double,  # L
+    ctypes.c_double,  # a_w
+    ctypes.c_double,  # a_l
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # Ks
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # Kp
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS')  # payoffs_out
@@ -87,19 +108,29 @@ lib.get_payoffs.restype = None
 
 def get_payoffs(
     n_persons: int,
+    Ks: np.ndarray,
+    Kp: np.ndarray,
     A: np.ndarray,
     alpha: np.ndarray,
     B: np.ndarray,
     beta: np.ndarray,
     theta: np.ndarray,
     d: np.ndarray,
-    r: np.ndarray,
-    Ks: np.ndarray,
-    Kp: np.ndarray
+    r: float,
+    W: float = 1.0,
+    L: float = 0.0,
+    a_w: float = 0.0,
+    a_l: float = 0.0
 ):
-    assert(n_persons == len(A) == len(alpha) == len(B) == len(beta) == len(theta) == len(d) == len(r) == len(Ks) == len(Kp))
+    assert(n_persons == len(A) == len(alpha) == len(B) == len(beta) == len(theta) == len(d) == len(Ks) == len(Kp))
     payoffs = np.empty(n_persons)
-    lib.get_payoffs(n_persons, A, alpha, B, beta, theta, d, r, Ks, Kp, payoffs)
+    lib.get_payoffs(
+        n_persons, A, alpha, B, beta, theta,
+        d, r,
+        W, L, a_w, a_l,
+        Ks, Kp,
+        payoffs
+    )
     return payoffs
 
 
@@ -115,7 +146,8 @@ lib.run_variable_r.argtypes = [
     ctypes.c_double,  # c
     ctypes.c_int,  # max_iters
     ctypes.c_double,  # exit_tol
-    ctypes.c_double,  # ifopt_tol
+    ctypes.c_int,  # ipopt_max_iter
+    ctypes.c_double,  # ipopt_tol
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS')  # result
 ]
 lib.run_variable_r.restype = None
@@ -130,13 +162,18 @@ def solve_variable_r(
     d: np.ndarray,
     r0: float,
     c: float,
-    max_iters: int,
+    max_iters: int = 200,
     exit_tol: float = 0.001,
-    ifopt_tol: float = 0.001
+    ipopt_max_iters: int = 200,
+    ipopt_tol: float = 0.001
 ) -> np.ndarray:
     assert(n_persons == len(A) == len(alpha) == len(B) == len(beta) == len(theta) == len(d))
     result = np.empty((2, n_persons))
-    lib.run_variable_r(n_persons, A, alpha, B, beta, theta, d, r0, c, max_iters, exit_tol, ifopt_tol, result)
+    lib.run_variable_r(
+        n_persons, A, alpha, B, beta, theta, d, r0, c,
+        max_iters, exit_tol, ipopt_max_iters, ipopt_tol,
+        result
+    )
     return result.T
 
 
@@ -188,8 +225,7 @@ if __name__ == '__main__':
     theta = ones * 0.0
 
     d = ones * 1.0
-    r = ones * 0.01
-    max_iters = 100
+    r = 0.01
 
     K = solve(
         n_persons,
@@ -199,8 +235,7 @@ if __name__ == '__main__':
         beta,
         theta,
         d,
-        r,
-        max_iters
+        r
     )
     print(K)
 
@@ -209,19 +244,21 @@ if __name__ == '__main__':
     print(
         prod_F(
             n_persons,
+            Ks,
+            Kp,
             A,
             alpha,
             B,
             beta,
-            theta,
-            Ks,
-            Kp
+            theta
         )
     )
 
     print(
         get_payoffs(
             n_persons,
+            Ks,
+            Kp,
             A,
             alpha,
             B,
@@ -229,8 +266,6 @@ if __name__ == '__main__':
             theta,
             d,
             r,
-            Ks,
-            Kp
         )
     )
 
@@ -247,8 +282,7 @@ if __name__ == '__main__':
         theta,
         d,
         r0,
-        c,
-        max_iters
+        c
     )
     print(K)
 
@@ -256,19 +290,21 @@ if __name__ == '__main__':
     print(
         prod_F(
             n_persons,
+            Ks,
+            Kp,
             A,
             alpha,
             B,
             beta,
-            theta,
-            Ks,
-            Kp
+            theta
         )
     )
 
     print(
         get_payoffs_variable_r(
             n_persons,
+            Ks,
+            Kp,
             A,
             alpha,
             B,
@@ -276,8 +312,6 @@ if __name__ == '__main__':
             theta,
             d,
             r0,
-            c,
-            Ks,
-            Kp
+            c
         )
     )

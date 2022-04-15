@@ -28,19 +28,26 @@ void run(
     double* beta,
     double* theta,
     double* d,
-    double* r,
+    double r,
+    double W,
+    double L,
+    double a_w,
+    double a_l,
     int max_iters,
     double exit_tol,
+    int ipopt_max_iter,
+    double ipopt_tol,
     double* result
 ) {
     ProdFunc prodFunc = build_ProdFunc(n_persons, A, alpha, B, beta, theta);
-    Problem problem(
+    ConstantRProblem problem(
         Eigen::Map<Eigen::ArrayXd>(d, n_persons),
-        Eigen::Map<Eigen::ArrayXd>(r, n_persons),
-        prodFunc
+        prodFunc,
+        r,
+        CSF(W, L, a_w, a_l)
     );
 
-    Eigen::ArrayX2d solution = solve(problem, max_iters, exit_tol);
+    Eigen::ArrayX2d solution = solve(problem, max_iters, exit_tol, ipopt_max_iter, ipopt_tol);
     Eigen::Map<Eigen::ArrayX2d>(result, solution.rows(), solution.cols()) = solution;
 }
 
@@ -76,7 +83,11 @@ void get_payoffs(
     double* beta,
     double* theta,
     double* d,
-    double* r,
+    double r,
+    double W,
+    double L,
+    double a_w,
+    double a_l,
     double* Ks,
     double* Kp,
     double* payoffs_out
@@ -84,10 +95,11 @@ void get_payoffs(
     ProdFunc prodFunc = build_ProdFunc(n_persons, A, alpha, B, beta, theta);
     Eigen::ArrayXd Ks_ = Eigen::Map<Eigen::ArrayXd>(Ks, n_persons);
     Eigen::ArrayXd Kp_ = Eigen::Map<Eigen::ArrayXd>(Kp, n_persons);
-    Eigen::ArrayXd payoffs = Problem(
+    Eigen::ArrayXd payoffs = ConstantRProblem(
         Eigen::Map<Eigen::ArrayXd>(d, n_persons),
-        Eigen::Map<Eigen::ArrayXd>(r, n_persons),
-        prodFunc
+        prodFunc,
+        r,
+        CSF(W, L, a_w, a_l)
     ).get_all_net_payoffs(
         Ks_, Kp_
     );
@@ -107,7 +119,8 @@ void run_variable_r(
     double c,
     int max_iters,
     double exit_tol,
-    double ifopt_tol,
+    int ipopt_max_iter,
+    double ipopt_tol,
     double* result
 ) {
     ProdFunc prodFunc = build_ProdFunc(n_persons, A, alpha, B, beta, theta);
@@ -117,7 +130,7 @@ void run_variable_r(
         r0,
         c
     );
-    Eigen::ArrayX2d solution = solve(&problem, max_iters, exit_tol, ifopt_tol);
+    Eigen::ArrayX2d solution = solve(problem, max_iters, exit_tol, ipopt_max_iter, ipopt_tol);
     Eigen::Map<Eigen::ArrayX2d>(result, solution.rows(), solution.cols()) = solution;
 }
 

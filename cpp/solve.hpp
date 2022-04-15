@@ -18,7 +18,9 @@
 
 using SparseJacobian = Eigen::SparseMatrix<double, Eigen::RowMajor>;
 
-const double DEFAULT_IFOPT_TOL = 0.001;
+const int IPOPT_PRINT_LEVEL = 0;
+const double DEFAULT_IPOPT_TOL = 0.001;
+const int DEFAULT_IPOPT_MAX_ITER = 200;
 
 
 class VarSet : public ifopt::VariableSet {
@@ -52,7 +54,7 @@ class IfoptObjective : public ifopt::CostTerm {
     // note that this actually is framed in terms of a function we want to _maximize_, not minimize
     // since in economics that's typically what we're trying to do
 public:
-    IfoptObjective(const std::string& name, const std::string& varName, BaseObjective* objectiveFunc);
+    IfoptObjective(const std::string& name, const std::string& varName, Objective& objectiveFunc);
 
     double GetCost() const override;
 
@@ -62,12 +64,16 @@ public:
 
 private:
     std::string varName;
-    BaseObjective* objectiveFunc;
+    Objective& objectiveFunc;
 };
 
 // have to use shared pointers in what follows since that's what ifopt expects
 
-void configure_solver(std::shared_ptr<ifopt::IpoptSolver> solver, double tol);
+void configure_solver(
+    std::shared_ptr<ifopt::IpoptSolver> solver,
+    int max_iter,
+    double tol
+);
 
 
 class IfoptProblem {
@@ -77,6 +83,7 @@ public:
     IfoptProblem(
         std::shared_ptr<VarSet> varSet,
         std::shared_ptr<IfoptObjective> objective,
+        int max_iter,
         double tol
     );
 
@@ -88,28 +95,6 @@ private:
     ifopt::Problem problem;
     std::shared_ptr<ifopt::IpoptSolver> solver = std::make_shared<ifopt::IpoptSolver>();
 };
-
-
-Eigen::ArrayX2d solve_single(
-    const Problem& problem,
-    const Eigen::ArrayX2d& current_guess,
-    double ifopt_tol
-);
-
-Eigen::ArrayX2d solve(
-    const Problem& problem,
-    const Eigen::ArrayX2d& start_guess,
-    int max_iters,
-    double exit_tol,
-    double ifopt_tol = DEFAULT_IFOPT_TOL
-);
-
-Eigen::ArrayX2d solve(
-    const Problem& problem,
-    int max_iters,
-    double exit_tol,
-    double ifopt_tol = DEFAULT_IFOPT_TOL
-); // uses default starting guess
 
 
 // Native multithreading isn't working right now; ifopt is doing something weird under the hood
@@ -142,25 +127,27 @@ Eigen::ArrayX2d solve(
 //     std::mutex my_mutex;
 // };
 
-// duplication in following functions could be eliminated with better class inheritance, but whatever; it works as is
 
 Eigen::ArrayX2d solve_single(
-    const VariableRProblem* problem,
+    const Problem& problem,
     const Eigen::ArrayX2d& current_guess,
-    double ifopt_tol
+    int ipopt_max_iter,
+    double ipopt_tol
 );
 
 Eigen::ArrayX2d solve(
-    const VariableRProblem* problem,
+    const Problem& problem,
     const Eigen::ArrayX2d& start_guess,
     int max_iters,
     double exit_tol,
-    double ifopt_tol = DEFAULT_IFOPT_TOL
+    int ipopt_max_iter = DEFAULT_IPOPT_MAX_ITER,
+    double ipopt_tol = DEFAULT_IPOPT_TOL
 );
 
 Eigen::ArrayX2d solve(
-    const VariableRProblem* problem,
+    const Problem& problem,
     int max_iters,
     double exit_tol,
-    double ifopt_tol = DEFAULT_IFOPT_TOL
+    int ipopt_max_iter = DEFAULT_IPOPT_MAX_ITER,
+    double ipopt_tol = DEFAULT_IPOPT_TOL
 ); // uses default starting guess
