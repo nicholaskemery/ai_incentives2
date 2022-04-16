@@ -109,7 +109,7 @@ def _plot_helper(
             betas,
             thetas,
             ds,
-            r_,
+            r_ * np.ones(n_players),
             W=W,
             L=L,
             a_w=a_w,
@@ -157,7 +157,7 @@ def run_scenario_1(
                 beta * ones,
                 theta * ones,
                 d * ones,
-                r_
+                r_ * ones
             ) for r_ in R
         ])
     strats = np.array(strats)
@@ -230,7 +230,7 @@ def run_scenario_1_multiple(
                     beta_ * ones,
                     theta_ * ones,
                     d_ * ones,
-                    r_,
+                    r_ * ones,
                     W=W,
                     L=L,
                     a_w=a_w,
@@ -287,29 +287,29 @@ def run_scenario_1_multiple(
 #     plotname='0'
 # )
 
-# vary d with theta = 0
-run_scenario_1_multiple(
-    As=[A]*4,
-    Bs=[B]*4,
-    alphas=[alpha]*4,
-    betas=[beta]*4,
-    thetas=[0.0]*4,
-    ds=[0.1, 0.5, 1.0, 1.5],
-    labels=['d = 0.0', 'd = 0.5', 'd = 1.0', 'd = 1.5'],
-    plotname='varyd_theta0'
-)
+# # vary d with theta = 0
+# run_scenario_1_multiple(
+#     As=[A]*4,
+#     Bs=[B]*4,
+#     alphas=[alpha]*4,
+#     betas=[beta]*4,
+#     thetas=[0.0]*4,
+#     ds=[0.1, 0.5, 1.0, 1.5],
+#     labels=['d = 0.0', 'd = 0.5', 'd = 1.0', 'd = 1.5'],
+#     plotname='varyd_theta0'
+# )
 
-# vary d with theta = 0.25
-run_scenario_1_multiple(
-    As=[A]*4,
-    Bs=[B]*4,
-    alphas=[alpha]*4,
-    betas=[beta]*4,
-    thetas=[0.3]*4,
-    ds=[0.1, 0.5, 1.0, 1.5],
-    labels=['d = 0.0', 'd = 0.5', 'd = 1.0', 'd = 1.5'],
-    plotname='varyd_theta025'
-)
+# # vary d with theta = 0.25
+# run_scenario_1_multiple(
+#     As=[A]*4,
+#     Bs=[B]*4,
+#     alphas=[alpha]*4,
+#     betas=[beta]*4,
+#     thetas=[0.3]*4,
+#     ds=[0.1, 0.5, 1.0, 1.5],
+#     labels=['d = 0.0', 'd = 0.5', 'd = 1.0', 'd = 1.5'],
+#     plotname='varyd_theta025'
+# )
 
 # vary d with higher productivity, theta = 0
 # run_scenario_1_multiple(
@@ -396,7 +396,7 @@ def run_scenario_3(
                 beta * ones,
                 theta * ones,
                 d * ones,
-                r
+                r * ones
             ) for a_ in A_
         ])
     strats = np.array(strats)
@@ -449,7 +449,7 @@ def run_scenario_3(
                 beta * ones,
                 theta * ones,
                 d * ones,
-                r,
+                r * ones,
                 W=W,
                 L=L,
                 a_w=a_w,

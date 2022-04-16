@@ -1,10 +1,12 @@
-import numpy as np
-from scipy.optimize import minimize, Bounds
-
 import warnings
+
+import numpy as np
+from scipy.optimize import Bounds, minimize
+
 warnings.filterwarnings('ignore')
 
-SOLVER_TOL = 1e-8
+SOLVER_TOL = 1e-3
+SOLVER_MAX_ITERS = 500
 DEFAULT_WINDOW = 1
 
 
@@ -72,76 +74,115 @@ class ProdFunc:
         return jac
 
 
+
+class CSF:
+
+    def __init__(self, W: float = 1.0, L: float = 0.0, a_w: float = 0.0, a_l: float = 0.0):
+        """
+        W is reward for winner
+        L is reward for loser(s)
+        a_w is reward per unit of p for winner
+        a_l is reward per unit of p for loser
+
+        win proba is p[i] / sum(p)
+        """
+        self.W = W
+        self.L = L
+        self.a_w = a_w
+        self.a_l = a_l
+    
+    def reward(self, i: int, p: np.ndarray):
+        win_proba = p[..., i] / p.sum(axis=-1)
+        return (
+            (self.W + p[..., i] * self.a_w) * win_proba
+            + (self.L + p[..., i] * self.a_l) * (1 - win_proba)
+        )
+    
+    def reward_deriv(self, i: int, p: np.ndarray):
+        sum_ = p.sum(axis=-1)
+        win_proba = p[..., i] / sum_
+        win_proba_deriv = (sum_ - p[..., i]) / sum_**2
+        return (
+            self.a_l + (self.a_w - self.a_l) * win_proba
+            + (self.W - self.L + (self.a_w - self.a_l) * p[..., i]) * win_proba_deriv
+        )
+
+
+
 class Problem:
 
-    def __init__(self, d, r, R, R_deriv, prodFunc):
+    def __init__(self, d: np.ndarray, r: np.ndarray, prodFunc: ProdFunc, csf: CSF = CSF()):
         """
-        d is np array of length n
-        r is a single float value
-        R is the reward function
-        R_deriv is the derivative of R
-        prodFunc is of class ProdFunc
+        d and r are np arrays of length n
         """
         self.d = d
         self.r = r
-        self.R = R
-        self.R_deriv = R_deriv
         self.prodFunc = prodFunc
+        self.csf = csf
 
         self.n = len(d)
-        assert(prodFunc.n == self.n)
+        assert(prodFunc.n == self.n == len(r))
 
-    def net_payoff(self, i, Ks, Kp):
+        self.hist = np.empty((0, self.n, 2))
+
+    def net_payoff(self, i: int, Ks: np.ndarray, Kp: np.ndarray):
         """
         Gets payoff for player i when strategies are represented by Ks and Kp vectors
         i is an integer index
         Ks and Kp are np arrays with length == self.n
+        outputs an ndarray (if ndim of Ks and Kp > 1) or a float
         """
         s, p = self.prodFunc.F(Ks, Kp)
         proba = (s / (1 + s)).prod(axis=-1)
-        return proba * self.R(i, p) - (1 - proba) * self.d[i] - self.r * (Ks[..., i] + Kp[..., i])
+        return proba * self.csf.reward(i, p) - (1 - proba) * self.d[i] - self.r[i] * (Ks[..., i] + Kp[..., i])
     
-    def get_func(self, i, history):
-        hist = history.copy()
+    def all_net_payoffs(self, Ks: np.ndarray, Kp: np.ndarray):
+        """Basically just runs self.net_payoff for all the i"""
+        s, p = self.prodFunc.F(Ks, Kp)
+        proba = (s / (1 + s)).prod(axis=-1)
+        return np.array([
+            proba * self.csf.reward(i, p) - (1 - proba) * self.d[i] - self.r[i] * (Ks[..., i] + Kp[..., i])
+            for i in range(self.n)
+        ])
+    
+    def get_func(self, i: int):
+        assert(self.hist.shape[0] > 0)
         def func(x):
-            hist[:, i] = np.repeat(x.reshape(1, -1), hist.shape[0], axis=0)
-            return -self.net_payoff(i, hist[..., 0], hist[..., 1]).sum()
+            self.hist[:, i] = np.repeat(x.reshape(1, -1), self.hist.shape[0], axis=0)
+            return -self.net_payoff(i, self.hist[..., 0], self.hist[..., 1]).sum()
         return func
     
-    def get_jac(self, i, history):
+    def get_jac(self, i: int):
+        assert(self.hist.shape[0] > 0)
         prod_jac = self.prodFunc.get_jac(i)
-        hist = history.copy()
         def jac(x):
-            # print('x', x)
-            hist[:, i, :] = np.repeat(x.reshape(1, -1), hist.shape[0], axis=0)
-            s, p = self.prodFunc.F(hist[..., 0], hist[..., 1])
-            # print('s, p', s, p)
+            self.hist[:, i, :] = np.repeat(x.reshape(1, -1), self.hist.shape[0], axis=0)
+            s, p = self.prodFunc.F(self.hist[..., 0], self.hist[..., 1])
             probas = s / (1 + s)
-            # print('probas', probas)
             proba = probas.prod(axis=-1)
-            # print('proba', proba)
             proba_mult = proba / (s[:, i] * (1 + s[:, i]))
-            # print('proba_mult', proba_mult)
-            prod_jac_ = prod_jac(hist[:, i, :])
+            prod_jac_ = prod_jac(self.hist[:, i, :])
             s_ks = prod_jac_[0, 0]
             s_kp = prod_jac_[0, 1]
             p_ks = prod_jac_[1, 0] # == 0
             p_kp = prod_jac_[1, 1]
             proba_ks = proba_mult * s_ks
-            # print('proba_ks', proba_ks)
             proba_kp = proba_mult * s_kp
-            # print('proba_kp', proba_kp)
-            R = self.R(i, p)
-            # print('R', R)
-            R_deriv = self.R_deriv(i, p)
-            # print('R_deriv', R_deriv)
+            R_ = self.csf.reward(i, p)
+            R_deriv_ = self.csf.reward_deriv(i, p)
             return -np.array([
-                proba_ks * (R + self.d[i]) + proba * R_deriv * p_ks - self.r,
-                proba_kp * (R + self.d[i]) + proba * R_deriv * p_kp - self.r
+                proba_ks * (R_ + self.d[i]) + proba * R_deriv_ * p_ks - self.r[i],
+                proba_kp * (R_ + self.d[i]) + proba * R_deriv_ * p_kp - self.r[i]
             ]).sum(axis=1)
         return jac
 
-    def solve_single(self, history, verbose=1):
+    def solve_single(
+        self,
+        history: np.ndarray,
+        verbose: int = 1,
+        solver_tol: float = SOLVER_TOL,
+        solver_max_iters: int = SOLVER_MAX_ITERS
+    ):
         """
         history should be 3d np.array
         dim 0 is iteration
@@ -149,30 +190,42 @@ class Problem:
         dim 2 is factor (s, p)
         """
         assert(self.n == history.shape[1])
+        self.hist = history.copy()
         strategies = np.empty((self.n, 2))
         for i in range(self.n):
             res = minimize(
-                self.get_func(i, history),
-                jac=self.get_jac(i, history),
+                self.get_func(i),
+                jac=self.get_jac(i),
                 x0=history[-1, i, :],
                 method='trust-constr',
                 bounds=Bounds([0.0, 0.0], [np.inf, np.inf]),
                 options={
-                    'xtol': SOLVER_TOL,
+                    'xtol': solver_tol,
+                    'maxiter': solver_max_iters,
                     'verbose': verbose
                 }
             )
             strategies[i, :] = res.x
         return strategies
     
-    def solve(self, T=100, window=DEFAULT_WINDOW, iter_tol=1e-3, verbose=0, init_guess_mu=0.0):
+    def solve(
+        self,
+        T: int = 100,
+        window: int = DEFAULT_WINDOW,
+        iter_tol: float = 1e-3,
+        verbose: int = 0,
+        init_guess: float = 1.0, 
+        solver_tol: float = SOLVER_TOL,
+        solver_max_iters: int = SOLVER_MAX_ITERS
+    ):
         history = np.empty((T, self.n, 2))
-        # initialize strategy guesses with log normal dist
-        history[0, :, :] = np.exp(np.random.randn(self.n, 2)*0.2 + init_guess_mu)
+        history[0, :, :] = np.ones((self.n, 2)) * init_guess
         for t in range(1, T):
             history[t, :, :] = self.solve_single(
                 history[max(0, t-window):t, :, :],
-                verbose=verbose
+                verbose=verbose,
+                solver_tol=solver_tol,
+                solver_max_iters=solver_max_iters
             )
             if np.abs((history[t, :, :] - history[t-1, :, :]) / history[t-1, :, :]).max() < iter_tol:
                 print(f'Exited on iteration {t}')
@@ -180,12 +233,6 @@ class Problem:
         print('Reached max iterations')
         return history
 
-def simple_CSF(i, p):
-    return p[..., i] / p.sum(axis=-1)
-
-def simple_CSF_deriv(i, p):
-    sum_ = p.sum(axis=-1)
-    return (sum_ - p[..., i]) / sum_**2
 
 
 if __name__ == '__main__':
@@ -193,6 +240,6 @@ if __name__ == '__main__':
     n = 2
     ones = np.ones(n, dtype=np.float64)
     prodFunc = ProdFunc(1 * ones, 0.5 * ones, 1 * ones, 0.5 * ones, 0.0 * ones)
-    problem = Problem(0.1 * ones, 0.06, simple_CSF, simple_CSF_deriv, prodFunc)
+    problem = Problem(0.1 * ones, 0.06 * ones, prodFunc)
     hist = problem.solve()
     print(hist)

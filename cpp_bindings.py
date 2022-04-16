@@ -15,7 +15,7 @@ lib.run.argtypes = [
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # beta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # theta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # d
-    ctypes.c_double,  # r
+    ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # r
     ctypes.c_double,  # W
     ctypes.c_double,  # L
     ctypes.c_double,  # a_w
@@ -36,7 +36,7 @@ def solve(
     beta: np.ndarray,
     theta: np.ndarray,
     d: np.ndarray,
-    r: float,
+    r: np.ndarray,
     W: float = 1.0,
     L: float = 0.0,
     a_w: float = 0.0,
@@ -46,7 +46,7 @@ def solve(
     ipopt_max_iters: int = 200,
     ipopt_tol: float = 0.001
 ) -> np.ndarray:
-    assert(n_persons == len(A) == len(alpha) == len(B) == len(beta) == len(theta) == len(d))
+    assert(n_persons == len(A) == len(alpha) == len(B) == len(beta) == len(theta) == len(d) == len(r))
     result = np.empty((2, n_persons))
     lib.run(
         n_persons, A, alpha, B, beta, theta, d, r,
@@ -95,7 +95,7 @@ lib.get_payoffs.argtypes = [
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # beta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # theta
     ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # d
-    ctypes.c_double,  # r
+    ndpointer(ctypes.c_double, flags='C_CONTIGUOUS'),  # r
     ctypes.c_double,  # W
     ctypes.c_double,  # L
     ctypes.c_double,  # a_w
@@ -116,13 +116,13 @@ def get_payoffs(
     beta: np.ndarray,
     theta: np.ndarray,
     d: np.ndarray,
-    r: float,
+    r: np.ndarray,
     W: float = 1.0,
     L: float = 0.0,
     a_w: float = 0.0,
     a_l: float = 0.0
 ):
-    assert(n_persons == len(A) == len(alpha) == len(B) == len(beta) == len(theta) == len(d) == len(Ks) == len(Kp))
+    assert(n_persons == len(A) == len(alpha) == len(B) == len(beta) == len(theta) == len(d) == len(r) == len(Ks) == len(Kp))
     payoffs = np.empty(n_persons)
     lib.get_payoffs(
         n_persons, A, alpha, B, beta, theta,
@@ -225,7 +225,7 @@ if __name__ == '__main__':
     theta = ones * 0.0
 
     d = ones * 1.0
-    r = 0.01
+    r = ones * 0.01
 
     K = solve(
         n_persons,

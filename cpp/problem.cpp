@@ -44,7 +44,7 @@ double Problem::net_payoff(
 ) const {
     auto [s, p] = prodFunc.f(Ks, Kp);
     double proba = (s / (1 + s)).prod();
-    return proba * csf.reward(i, p) - (1 - proba) * d(i)  - r(s(i)) * (Ks(i) + Kp(i));
+    return proba * csf.reward(i, p) - (1 - proba) * d(i)  - r(i, s(i)) * (Ks(i) + Kp(i));
 }
 
 Eigen::ArrayXd Problem::get_all_net_payoffs(
@@ -56,7 +56,7 @@ Eigen::ArrayXd Problem::get_all_net_payoffs(
     std::vector<double> payoffs;
     payoffs.reserve(n_players);
     for (int i = 0; i < n_players; i++) {
-        payoffs.push_back(proba * csf.reward(i, p) - (1 - proba) * d(i) - r(s(i)) * (Ks(i) + Kp(i)));
+        payoffs.push_back(proba * csf.reward(i, p) - (1 - proba) * d(i) - r(i, s(i)) * (Ks(i) + Kp(i)));
     }
     return Eigen::Map<Eigen::ArrayXd>(payoffs.data(), n_players);
 }
@@ -96,8 +96,8 @@ Eigen::Array2d Objective::jac(const Eigen::Array2d& x) {
     double R_ = problem.csf.reward(i, p);
     double R_deriv_ = problem.csf.reward_deriv(i, p);
 
-    double r = problem.r(s(i));
-    double drds = problem.drds(s(i));
+    double r = problem.r(i, s(i));
+    double drds = problem.drds(i, s(i));
     double drKsdKs = r - drds * prod_jac(0, 0) * x(0);
     double drKpdKp = r - drds * prod_jac(0, 1) * x(1);
 
@@ -115,21 +115,23 @@ Eigen::Array2d Objective::jac(const Eigen::Array2d& x) {
 ConstantRProblem::ConstantRProblem(
     Eigen::ArrayXd d,
     ProdFunc prodFunc,
-    double r_
-) : Problem(d, prodFunc), r_(r_) {}
+    Eigen::ArrayXd r_
+) : ConstantRProblem(d, prodFunc, r_, CSF()) {}
 
 ConstantRProblem::ConstantRProblem(
     Eigen::ArrayXd d,
     ProdFunc prodFunc,
-    double r_,
+    Eigen::ArrayXd r_,
     CSF csf
-) : Problem(d, prodFunc, csf), r_(r_) {}
-
-double ConstantRProblem::r(double s) const {
-    return r_;
+) : Problem(d, prodFunc, csf), r_(r_) {
+    assert(r_.size() == n_players);
 }
 
-double ConstantRProblem::drds(double s) const {
+double ConstantRProblem::r(int i, double s) const {
+    return r_(i);
+}
+
+double ConstantRProblem::drds(int i, double s) const {
     return 0;
 }
 
@@ -141,11 +143,11 @@ DecayingExpRProblem::DecayingExpRProblem(
     double c
 ) : Problem(d, prodFunc), r0(r0), c(c) {}
 
-double DecayingExpRProblem::r(double s) const {
+double DecayingExpRProblem::r(int i, double s) const {
     return r0 * std::exp(-c * s);
 }
 
-double DecayingExpRProblem::drds(double s) const {
+double DecayingExpRProblem::drds(int i, double s) const {
     return -c * r0 * std::exp(-c * s);
 }
 

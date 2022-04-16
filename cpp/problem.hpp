@@ -55,8 +55,8 @@ public:
         const Eigen::ArrayXd& Kp
     ) const;
 
-    virtual double r(double s) const = 0;
-    virtual double drds(double s) const = 0;
+    virtual double r(int i, double s) const = 0;
+    virtual double drds(int i, double s) const = 0;
 
     const Eigen::ArrayXd d;
     ProdFunc prodFunc;
@@ -87,20 +87,20 @@ public:
     ConstantRProblem(
         Eigen::ArrayXd d,
         ProdFunc prodFunc,
-        double r_
+        Eigen::ArrayXd r_
     );
 
     ConstantRProblem(
         Eigen::ArrayXd d,
         ProdFunc prodFunc,
-        double r_,
+        Eigen::ArrayXd r_,
         CSF csf
     );
 
-    virtual double r(double s) const;
-    virtual double drds(double s) const;
+    virtual double r(int i, double s) const;
+    virtual double drds(int i, double s) const;
 
-    const double r_;
+    const Eigen::ArrayXd r_;
 };
 
 
@@ -114,8 +114,8 @@ public:
         double c
     );
 
-    virtual double r(double s) const;
-    virtual double drds(double s) const;
+    virtual double r(int i, double s) const;
+    virtual double drds(int i, double s) const;
 
     const double r0;
     const double c;

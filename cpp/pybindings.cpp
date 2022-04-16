@@ -28,7 +28,7 @@ void run(
     double* beta,
     double* theta,
     double* d,
-    double r,
+    double* r,
     double W,
     double L,
     double a_w,
@@ -43,7 +43,7 @@ void run(
     ConstantRProblem problem(
         Eigen::Map<Eigen::ArrayXd>(d, n_persons),
         prodFunc,
-        r,
+        Eigen::Map<Eigen::ArrayXd>(r, n_persons),
         CSF(W, L, a_w, a_l)
     );
 
@@ -83,7 +83,7 @@ void get_payoffs(
     double* beta,
     double* theta,
     double* d,
-    double r,
+    double* r,
     double W,
     double L,
     double a_w,
@@ -98,7 +98,7 @@ void get_payoffs(
     Eigen::ArrayXd payoffs = ConstantRProblem(
         Eigen::Map<Eigen::ArrayXd>(d, n_persons),
         prodFunc,
-        r,
+        Eigen::Map<Eigen::ArrayXd>(r, n_persons),
         CSF(W, L, a_w, a_l)
     ).get_all_net_payoffs(
         Ks_, Kp_
