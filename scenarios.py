@@ -1,18 +1,25 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 from multiprocessing import Pool, cpu_count
+from typing import Callable
 
+# set active directory to location of this file
+os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
-# BACKEND = 'cpp'
-# try:
-#     from cpp_bindings import solve, prod_F, get_payoffs
-# except ImportError:
-BACKEND = 'python'
 from simple_model import ProdFunc, CSF, Problem
+# check if cpp backend is available
+if os.path.exists('build/libpybindings.so'):
+    BACKEND = 'cpp'
+    from cpp_bindings import solve, prod_F, get_payoffs
+else:
+    BACKEND = 'python'
 
 print(f'Using {BACKEND} backend')
 
+
 VEC_PARAM_NAMES = ['A', 'alpha', 'B', 'beta', 'theta', 'd', 'r']
+
 
 def _python_multiproc_helper(args):
     (
@@ -29,6 +36,34 @@ def _python_multiproc_helper(args):
         max_iters, iter_tol=exit_tol,
         solver_max_iters=nlp_max_iters, solver_tol=nlp_exit_tol
     )[-1]
+
+
+def _cpp_multiproc_helper(args):
+    (
+        n_players,
+        A, alpha, B, beta, theta,
+        d, r,
+        W, L, a_w, a_l,
+        max_iters, exit_tol, nlp_max_iters, nlp_exit_tol
+    ) = args
+    return solve(
+        n_players,
+        A,
+        alpha,
+        B,
+        beta,
+        theta,
+        d,
+        r,
+        W=W,
+        L=L,
+        a_w=a_w,
+        a_l=a_l,
+        max_iters=max_iters,
+        exit_tol=exit_tol,
+        ipopt_max_iters=nlp_max_iters,
+        ipopt_tol=nlp_exit_tol
+    )
 
 
 class Scenario:
@@ -95,25 +130,21 @@ class Scenario:
             #     self.n_steps_secondary = param.shape[0]
             else:
                 assert param.ndim == 1 and len(param) == n_players, "Length of param should match number of players"
-        
-    def _solve_cpp(self, plot: bool, plotname: str, labels: list = None):
-        # NOT YET IMPLEMENTED
-        pass
-
-    def _solve_python(self, param_dict: dict, plot: bool, plotname: str, labels: list = None):
+    
+    def _solver_helper(self, _multiproc_helper: Callable, param_dict: dict):
         with Pool(min(cpu_count(), self.n_steps)) as pool:
             strats = pool.map(
-                _python_multiproc_helper,
+                _multiproc_helper,
                 [
                     (
                         self.n_players,
-                        param_dict['A'][i],
-                        param_dict['alpha'][i],
-                        param_dict['B'][i],
-                        param_dict['beta'][i],
-                        param_dict['theta'][i],
-                        param_dict['d'][i],
-                        param_dict['r'][i],
+                        A_,
+                        alpha_,
+                        B_,
+                        beta_,
+                        theta_,
+                        d_,
+                        r_,
                         self.W,
                         self.L,
                         self.a_w,
@@ -123,56 +154,140 @@ class Scenario:
                         self.nlp_max_iters,
                         self.nlp_exit_tol
                     )
-                    for i in range(self.n_steps)
+                    for A_, alpha_, B_, beta_, theta_, d_, r_ in zip(
+                        param_dict['A'],
+                        param_dict['alpha'],
+                        param_dict['B'],
+                        param_dict['beta'],
+                        param_dict['theta'],
+                        param_dict['d'],
+                        param_dict['r']
+                    )
                 ]
             )
+        return strats
+    
+    def _plot_helper(self, s: np.ndarray, p: np.ndarray, payoffs: np.ndarray, plotname: str, labels: list = None):
+        xvar = getattr(self, self.varying_param)
+        # plot performance
+        if labels is None:
+            plt.plot(xvar, p.mean(axis=-1))
+        else:
+            for i in range(self.n_players):
+                plt.plot(xvar, p[:, i], label=labels[i])
+            plt.legend()
+        plt.ylabel('performance')
+        plt.xlabel(self.varying_param)
+        plt.savefig(f'plots/{plotname}_performance.png')
+        plt.clf()
+        if labels is None:
+            plt.plot(xvar, s.mean(axis=-1))
+        else:
+            for i in range(self.n_players):
+                plt.plot(xvar, s[:, i], label=labels[i])
+            plt.legend()
+        plt.ylabel('safety')
+        plt.xlabel(self.varying_param)
+        plt.savefig(f'plots/{plotname}_safety.png')
+        plt.clf()
+        # plot total disaster proba
+        probas = s / (1 + s)
+        total_proba = probas.prod(axis=-1)
+        plt.plot(xvar, total_proba)
+        plt.ylabel('Proba of safe outcome')
+        plt.xlabel(self.varying_param)
+        plt.savefig(f'plots/{plotname}_total_safety.png')
+        plt.clf()
+        # plot net payoffs
+        if labels is None:
+            plt.plot(xvar, payoffs.mean(axis=-1))
+        else:
+            for i in range(self.n_players):
+                plt.plot(xvar, payoffs[:, i], label=labels[i])
+            plt.legend()
+        plt.ylabel('net payoff')
+        plt.xlabel(self.varying_param)
+        plt.savefig(f'plots/{plotname}_payoff.png')
+        plt.clf()
+        
+    def _solve_cpp(self, param_dict: dict, plot: bool, plotname: str, labels: list = None):
+        assert BACKEND == 'cpp', 'You must have cpp backend available to use this method'
+        strats = self._solver_helper(_cpp_multiproc_helper, param_dict)
         if plot:
-            xvar = getattr(self, self.varying_param)
-            prodFuncs = [
-                ProdFunc(
-                    param_dict['A'][i],
-                    param_dict['alpha'][i],
-                    param_dict['B'][i],
-                    param_dict['beta'][i],
-                    param_dict['theta'][i]
+            # get s and p for each strategy
+            s_p = np.array([
+                prod_F(
+                    self.n_players,
+                    strat[:, 0].copy(),
+                    strat[:, 1].copy(),
+                    A_,
+                    alpha_,
+                    B_,
+                    beta_,
+                    theta_
                 )
-                for i in range(self.n_steps)
+                for strat, A_, alpha_, B_, beta_, theta_ in zip(
+                    strats,
+                    param_dict['A'],
+                    param_dict['alpha'],
+                    param_dict['B'],
+                    param_dict['beta'],
+                    param_dict['theta']
+                )
+            ])
+            s, p = s_p[:, 0, :], s_p[:, 1, :]
+            payoffs = np.array([
+                get_payoffs(
+                    self.n_players,
+                    strat[:, 0].copy(),
+                    strat[:, 1].copy(),
+                    A_,
+                    alpha_,
+                    B_,
+                    beta_,
+                    theta_,
+                    d_,
+                    r_,
+                    W=self.W,
+                    L=self.L,
+                    a_w=self.a_w,
+                    a_l=self.a_w,
+                )
+                for strat, A_, alpha_, B_, beta_, theta_, d_, r_ in zip(
+                    strats,
+                    param_dict['A'],
+                    param_dict['alpha'],
+                    param_dict['B'],
+                    param_dict['beta'],
+                    param_dict['theta'],
+                    param_dict['d'],
+                    param_dict['r']
+                )
+            ])
+            self._plot_helper(s, p, payoffs, plotname, labels)
+        return strats
+            
+
+    def _solve_python(self, param_dict: dict, plot: bool, plotname: str, labels: list = None):
+        strats = self._solver_helper(_python_multiproc_helper, param_dict)
+        if plot:
+            # get s and p for each strategy
+            prodFuncs = [
+                ProdFunc(A_, alpha_, B_, beta_, theta_)
+                for A_, alpha_, B_, beta_, theta_ in zip(
+                    param_dict['A'],
+                    param_dict['alpha'],
+                    param_dict['B'],
+                    param_dict['beta'],
+                    param_dict['theta']
+                )
             ]
             s_p = np.array([
                 prodFunc.F(strat[:, 0], strat[:, 1])
                 for prodFunc, strat in zip(prodFuncs, strats)
             ])
             s, p = s_p[:, 0, :], s_p[:, 1, :]
-            # plot performance
-            if labels is None:
-                plt.plot(xvar, p.mean(axis=-1))
-            else:
-                for i in range(self.n_players):
-                    plt.plot(xvar, p[:, i], label=labels[i])
-                plt.legend()
-            plt.ylabel('performance')
-            plt.xlabel(self.varying_param)
-            plt.savefig(f'plots/{plotname}_performance.png')
-            plt.clf()
-            if labels is None:
-                plt.plot(xvar, s.mean(axis=-1))
-            else:
-                for i in range(self.n_players):
-                    plt.plot(xvar, s[:, i], label=labels[i])
-                plt.legend()
-            plt.ylabel('safety')
-            plt.xlabel('factor cost')
-            plt.savefig(f'plots/{plotname}_safety.png')
-            plt.clf()
-            # plot total disaster proba
-            probas = s / (1 + s)
-            total_proba = probas.prod(axis=-1)
-            plt.plot(xvar, total_proba)
-            plt.ylabel('Proba of safe outcome')
-            plt.xlabel('factor cost')
-            plt.savefig(f'plots/{plotname}_total_safety.png')
-            plt.clf()
-            # plot net payoffs
+            # get payoffs for each strategy
             problems = [
                 Problem(
                     param_dict['d'][i],
@@ -188,16 +303,7 @@ class Scenario:
                 )
                 for strat, problem in zip(strats, problems)
             ])
-            if labels is None:
-                plt.plot(xvar, payoffs.mean(axis=-1))
-            else:
-                for i in range(self.n_players):
-                    plt.plot(xvar, payoffs[:, i], label=labels[i])
-                plt.legend()
-            plt.ylabel('net payoff')
-            plt.xlabel('factor cost')
-            plt.savefig(f'plots/{plotname}_payoff.png')
-            plt.clf()
+            self._plot_helper(s, p, payoffs, plotname, labels)
         return strats
 
     
@@ -214,7 +320,7 @@ class Scenario:
             else np.tile(
                 getattr(self, param_name),
                 (self.n_players, 1)
-            ).T
+            ).T.copy()  # copy so it remains contiguous in memory
             for param_name in VEC_PARAM_NAMES
         }
         if BACKEND == 'cpp':
