@@ -1,3 +1,4 @@
+from re import M
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -10,10 +11,13 @@ os.chdir(os.path.dirname(os.path.realpath(__file__)))
 from simple_model import ProdFunc, CSF, Problem
 # check if cpp backend is available
 if os.path.exists('build/libpybindings.so'):
-    BACKEND = 'cpp'
+    # BACKEND = 'cpp'
     from cpp_bindings import solve, prod_F, get_payoffs
-else:
-    BACKEND = 'python'
+# else:
+    # BACKEND = 'python'
+
+# use python backend by default; cpp backend is more finicky though theoretically faster
+BACKEND = 'python'
 
 print(f'Using {BACKEND} backend')
 
@@ -92,7 +96,7 @@ class Scenario:
         nlp_exit_tol: float = 1e-3,
         # which params are we changing?
         varying_param: str = 'r',  # By default we look at changes in r
-        # vary_secondary: str = None  # not necessary to provide a secondary varying param
+        secondary_varying_param: str = None  # not necessary to provide a secondary varying param
     ):
         # save params to this object's memory
         self.n_players = n_players
@@ -112,9 +116,9 @@ class Scenario:
         self.nlp_max_iters = nlp_max_iters
         self.nlp_exit_tol = nlp_exit_tol
         self.varying_param = varying_param
-        # self.vary_secondary = vary_secondary
+        self.secondary_varying_param = secondary_varying_param
         self.n_steps = 0
-        # self.n_steps_secondary = 0
+        self.n_steps_secondary = 0
         # make sure the vector parameters are the right sizes
         for param_name in VEC_PARAM_NAMES:
             param = getattr(self, param_name)
@@ -122,12 +126,10 @@ class Scenario:
                 assert param.ndim == 1, "Primary varying param is expected to be a 1d numpy array"
                 
                 self.n_steps = len(param)
-            # elif vary_secondary == param_name:
-            #     assert(
-            #         param.ndim == 2 and param.shape[1] == n_players,
-            #         "Secondary varying param is expected to be 2d numpy array; second dimension should match number of players"
-            #     )
-            #     self.n_steps_secondary = param.shape[0]
+            elif secondary_varying_param == param_name:
+                assert param.ndim == 2 and param.shape[1] == n_players, \
+                    "Secondary varying param is expected to be 2d numpy array; second dimension should match number of players"
+                self.n_steps_secondary = param.shape[0]
             else:
                 assert param.ndim == 1 and len(param) == n_players, "Length of param should match number of players"
     
@@ -210,104 +212,190 @@ class Scenario:
         plt.savefig(f'plots/{plotname}_payoff.png')
         plt.clf()
         
-    def _solve_cpp(self, param_dict: dict, plot: bool, plotname: str, labels: list = None):
+    def _solve_cpp(self, param_dict: dict, plot: bool, plotname: str = 'scenario', labels: list = None):
         assert BACKEND == 'cpp', 'You must have cpp backend available to use this method'
         strats = self._solver_helper(_cpp_multiproc_helper, param_dict)
+        # get s and p for each strategy
+        s_p = np.array([
+            prod_F(
+                self.n_players,
+                strat[:, 0].copy(),
+                strat[:, 1].copy(),
+                A_,
+                alpha_,
+                B_,
+                beta_,
+                theta_
+            )
+            for strat, A_, alpha_, B_, beta_, theta_ in zip(
+                strats,
+                param_dict['A'],
+                param_dict['alpha'],
+                param_dict['B'],
+                param_dict['beta'],
+                param_dict['theta']
+            )
+        ])
+        s, p = s_p[:, 0, :], s_p[:, 1, :]
+        payoffs = np.array([
+            get_payoffs(
+                self.n_players,
+                strat[:, 0].copy(),
+                strat[:, 1].copy(),
+                A_,
+                alpha_,
+                B_,
+                beta_,
+                theta_,
+                d_,
+                r_,
+                W=self.W,
+                L=self.L,
+                a_w=self.a_w,
+                a_l=self.a_w,
+            )
+            for strat, A_, alpha_, B_, beta_, theta_, d_, r_ in zip(
+                strats,
+                param_dict['A'],
+                param_dict['alpha'],
+                param_dict['B'],
+                param_dict['beta'],
+                param_dict['theta'],
+                param_dict['d'],
+                param_dict['r']
+            )
+        ])
         if plot:
-            # get s and p for each strategy
-            s_p = np.array([
-                prod_F(
-                    self.n_players,
-                    strat[:, 0].copy(),
-                    strat[:, 1].copy(),
-                    A_,
-                    alpha_,
-                    B_,
-                    beta_,
-                    theta_
-                )
-                for strat, A_, alpha_, B_, beta_, theta_ in zip(
-                    strats,
-                    param_dict['A'],
-                    param_dict['alpha'],
-                    param_dict['B'],
-                    param_dict['beta'],
-                    param_dict['theta']
-                )
-            ])
-            s, p = s_p[:, 0, :], s_p[:, 1, :]
-            payoffs = np.array([
-                get_payoffs(
-                    self.n_players,
-                    strat[:, 0].copy(),
-                    strat[:, 1].copy(),
-                    A_,
-                    alpha_,
-                    B_,
-                    beta_,
-                    theta_,
-                    d_,
-                    r_,
-                    W=self.W,
-                    L=self.L,
-                    a_w=self.a_w,
-                    a_l=self.a_w,
-                )
-                for strat, A_, alpha_, B_, beta_, theta_, d_, r_ in zip(
-                    strats,
-                    param_dict['A'],
-                    param_dict['alpha'],
-                    param_dict['B'],
-                    param_dict['beta'],
-                    param_dict['theta'],
-                    param_dict['d'],
-                    param_dict['r']
-                )
-            ])
             self._plot_helper(s, p, payoffs, plotname, labels)
-        return strats
+        return strats, s, p, payoffs
             
 
-    def _solve_python(self, param_dict: dict, plot: bool, plotname: str, labels: list = None):
+    def _solve_python(self, param_dict: dict, plot: bool, plotname: str = 'scenario', labels: list = None):
         strats = self._solver_helper(_python_multiproc_helper, param_dict)
+        # get s and p for each strategy
+        prodFuncs = [
+            ProdFunc(A_, alpha_, B_, beta_, theta_)
+            for A_, alpha_, B_, beta_, theta_ in zip(
+                param_dict['A'],
+                param_dict['alpha'],
+                param_dict['B'],
+                param_dict['beta'],
+                param_dict['theta']
+            )
+        ]
+        s_p = np.array([
+            prodFunc.F(strat[:, 0], strat[:, 1])
+            for prodFunc, strat in zip(prodFuncs, strats)
+        ])
+        s, p = s_p[:, 0, :], s_p[:, 1, :]
+        # get payoffs for each strategy
+        problems = [
+            Problem(
+                param_dict['d'][i],
+                param_dict['r'][i],
+                prodFunc,
+                CSF(self.W, self.L, self.a_w, self.a_l)
+            )
+            for i, prodFunc in enumerate(prodFuncs)
+        ]
+        payoffs = np.array([
+            problem.all_net_payoffs(
+                strat[:, 0], strat[:, 1]
+            )
+            for strat, problem in zip(strats, problems)
+        ])
         if plot:
-            # get s and p for each strategy
-            prodFuncs = [
-                ProdFunc(A_, alpha_, B_, beta_, theta_)
-                for A_, alpha_, B_, beta_, theta_ in zip(
-                    param_dict['A'],
-                    param_dict['alpha'],
-                    param_dict['B'],
-                    param_dict['beta'],
-                    param_dict['theta']
-                )
-            ]
-            s_p = np.array([
-                prodFunc.F(strat[:, 0], strat[:, 1])
-                for prodFunc, strat in zip(prodFuncs, strats)
-            ])
-            s, p = s_p[:, 0, :], s_p[:, 1, :]
-            # get payoffs for each strategy
-            problems = [
-                Problem(
-                    param_dict['d'][i],
-                    param_dict['r'][i],
-                    prodFunc,
-                    CSF(self.W, self.L, self.a_w, self.a_l)
-                )
-                for i, prodFunc in enumerate(prodFuncs)
-            ]
-            payoffs = np.array([
-                problem.all_net_payoffs(
-                    strat[:, 0], strat[:, 1]
-                )
-                for strat, problem in zip(strats, problems)
-            ])
             self._plot_helper(s, p, payoffs, plotname, labels)
-        return strats
-
+        return strats, s, p, payoffs
+    
+    def solve_with_secondary_variation(self, plot: bool = True, plotname: str = 'scenario', labels: list = None):
+        if labels is not None:
+            assert len(labels) == self.n_steps_secondary, "Length of lables should match number of secondary variations"
+        param_dicts = [
+            {
+                param_name:
+                np.tile(
+                    getattr(self, param_name),
+                    (self.n_players, 1)
+                ).T.copy()
+                if param_name == self.varying_param
+                else
+                np.tile(
+                    secondary_variation,
+                    (self.n_steps, 1)
+                )
+                if param_name == self.secondary_varying_param
+                else
+                np.tile(
+                    getattr(self, param_name),
+                    (self.n_steps, 1)
+                )
+                for param_name in VEC_PARAM_NAMES
+            }
+            for secondary_variation in getattr(self, self.secondary_varying_param)
+        ]
+        solver = self._solve_cpp if BACKEND == 'cpp' else self._solve_python
+        _, s_list, p_list, payoffs_list = tuple(zip(*[
+            solver(param_dict, plot = False) for param_dict in param_dicts
+        ]))
+        if plot:
+            xvar = getattr(self, self.varying_param)
+            # plot performance
+            if labels is None:
+                for p in p_list:
+                    plt.plot(xvar, p.mean(axis=-1))
+            else:
+                for p, label in zip(p_list, labels):
+                    plt.plot(xvar, p.mean(axis=-1), label=label)
+                plt.legend()
+            plt.ylabel('performance')
+            plt.xlabel(self.varying_param)
+            plt.savefig(f'plots/{plotname}_performance.png')
+            plt.clf()
+            if labels is None:
+                for s in s_list:
+                    plt.plot(xvar, s.mean(axis=-1))
+            else:
+                for s, label in zip(s_list, labels):
+                    plt.plot(xvar, s.mean(axis=-1), label=label)
+                plt.legend()
+            plt.ylabel('safety')
+            plt.xlabel(self.varying_param)
+            plt.savefig(f'plots/{plotname}_safety.png')
+            plt.clf()
+            # plot total disaster proba
+            if labels is None:
+                for s in s_list:
+                    probas = s / (1 + s)
+                    total_proba = probas.prod(axis=-1)
+                    plt.plot(xvar, total_proba)
+            else:
+                for s, label in zip(s_list, labels):
+                    probas = s / (1 + s)
+                    total_proba = probas.prod(axis=-1)
+                    plt.plot(xvar, total_proba, label=label)
+                plt.legend()
+            plt.ylabel('Proba of safe outcome')
+            plt.xlabel(self.varying_param)
+            plt.savefig(f'plots/{plotname}_total_safety.png')
+            plt.clf()
+            # plot net payoffs
+            if labels is None:
+                for payoffs in payoffs_list:
+                    plt.plot(xvar, payoffs.mean(axis=-1))
+            else:
+                for payoffs, label in zip(payoffs_list, labels):
+                    plt.plot(xvar, payoffs.mean(axis=-1), label=label)
+                plt.legend()
+            plt.ylabel('net payoff')
+            plt.xlabel(self.varying_param)
+            plt.savefig(f'plots/{plotname}_payoff.png')
+            plt.clf()
     
     def solve(self, plot: bool = True, plotname: str = 'scenario', labels: list = None):
+        if self.n_steps_secondary != 0:
+            # use a different method
+            return self.solve_with_secondary_variation(plot, plotname, labels)
         if labels is not None:
             assert len(labels) == self.n_players, "Length of labels should match number of players"
         # build dict of params to solve over
@@ -316,8 +404,10 @@ class Scenario:
             np.tile(
                 getattr(self, param_name),
                 (self.n_steps, 1)
-            ) if param_name != self.varying_param
-            else np.tile(
+            ) 
+            if param_name != self.varying_param
+            else
+            np.tile(
                 getattr(self, param_name),
                 (self.n_players, 1)
             ).T.copy()  # copy so it remains contiguous in memory
@@ -383,4 +473,26 @@ if __name__ == '__main__':
     scenario.solve(
         plotname='example2',
         labels=['weak player', 'medium player', 'strong player']
+    )
+
+    # Example 3: Change two things at once (note: all other params should be homogeneous in this case)
+    scenario = Scenario(
+        n_players = 2,
+        A = np.array([10., 10.]),
+        alpha = np.array([0.5, 0.5]),
+        B = np.array([
+            [10., 10.],
+            [20., 20.],
+            [30., 30.]
+        ]),
+        beta = np.array([0.5, 0.5]),
+        theta = np.array([0., 0.]),
+        d = np.array([1., 1.]),
+        r = np.linspace(0.02, 0.04, 20),
+        varying_param='r',
+        secondary_varying_param='B'
+    )
+    scenario.solve(
+        plotname='example3',
+        labels=['B=10', 'B=20', 'B=30']
     )
