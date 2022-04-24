@@ -1,7 +1,8 @@
+from tracemalloc import start
 import warnings
 
 import numpy as np
-from scipy.optimize import Bounds, minimize
+from scipy import optimize
 
 warnings.filterwarnings('ignore')
 
@@ -77,25 +78,32 @@ class ProdFunc:
 
 class CSF:
 
-    def __init__(self, W: float = 1.0, L: float = 0.0, a_w: float = 0.0, a_l: float = 0.0):
+    def __init__(self, w: float = 1.0, l: float = 0.0, a_w: float = 0.0, a_l: float = 0.0):
         """
-        W is reward for winner
-        L is reward for loser(s)
+        w is reward for winner
+        l is reward for loser(s)
         a_w is reward per unit of p for winner
         a_l is reward per unit of p for loser
 
         win proba is p[i] / sum(p)
         """
-        self.W = W
-        self.L = L
+        self.w = w
+        self.l = l
         self.a_w = a_w
         self.a_l = a_l
     
     def reward(self, i: int, p: np.ndarray):
         win_proba = p[..., i] / p.sum(axis=-1)
         return (
-            (self.W + p[..., i] * self.a_w) * win_proba
-            + (self.L + p[..., i] * self.a_l) * (1 - win_proba)
+            (self.w + p[..., i] * self.a_w) * win_proba
+            + (self.l + p[..., i] * self.a_l) * (1 - win_proba)
+        )
+    
+    def all_rewards(self, p: np.ndarray):
+        win_probas = p / p.sum(axis=-1)
+        return (
+            (self.w + p * self.a_w) * win_probas
+            + (self.l + p * self.a_l) * (1 - win_probas)
         )
     
     def reward_deriv(self, i: int, p: np.ndarray):
@@ -104,9 +112,17 @@ class CSF:
         win_proba_deriv = (sum_ - p[..., i]) / sum_**2
         return (
             self.a_l + (self.a_w - self.a_l) * win_proba
-            + (self.W - self.L + (self.a_w - self.a_l) * p[..., i]) * win_proba_deriv
+            + (self.w - self.l + (self.a_w - self.a_l) * p[..., i]) * win_proba_deriv
         )
-
+    
+    def all_reward_derivs(self, p: np.ndarray):
+        sum_ = p.sum(axis=-1)
+        win_probas = p / sum_
+        win_proba_derivs = (sum_ - p) / sum_**2
+        return (
+            self.a_l + (self.a_w - self.a_l) * win_probas
+            + (self.w - self.l + (self.a_w - self.a_l) * p) * win_proba_derivs
+        )
 
 
 class Problem:
@@ -123,8 +139,6 @@ class Problem:
         self.n = len(d)
         assert(prodFunc.n == self.n == len(r))
 
-        self.hist = np.empty((0, self.n, 2))
-
     def net_payoff(self, i: int, Ks: np.ndarray, Kp: np.ndarray):
         """
         Gets payoff for player i when strategies are represented by Ks and Kp vectors
@@ -140,10 +154,58 @@ class Problem:
         """Basically just runs self.net_payoff for all the i"""
         s, p = self.prodFunc.F(Ks, Kp)
         proba = (s / (1 + s)).prod(axis=-1)
-        return np.array([
-            proba * self.csf.reward(i, p) - (1 - proba) * self.d[i] - self.r[i] * (Ks[..., i] + Kp[..., i])
-            for i in range(self.n)
-        ])
+        return proba * self.csf.all_rewards(p) - (1 - proba) * self.d - self.r * (Ks + Kp)
+    
+    def get_jac(self):
+        prod_jacs = [self.prodFunc.get_jac(i) for i in range(self.n)]
+        def jac(x):
+            """
+            x is an n x 2 array of strategies;
+            returns an n x 2 jacobian matrix of the payoff function
+            """
+            s, p = self.prodFunc.F(x[..., 0], x[..., 1])
+            probas = s / (1 + s)
+            proba = probas.prod(axis=-1)
+            proba_mult = proba / (s * (1 + s))
+            prod_jac_ = np.array([prod_jac(x[..., i, :]) for i, prod_jac in enumerate(prod_jacs)])
+            s_ks = prod_jac_[..., 0, 0]
+            s_kp = prod_jac_[..., 0, 1]
+            p_ks = prod_jac_[..., 1, 0]
+            p_kp = prod_jac_[..., 1, 1]
+            proba_ks = proba_mult * s_ks
+            proba_kp = proba_mult * s_kp
+            R_ = self.csf.all_rewards(p)
+            R_deriv_ = self.csf.all_reward_derivs(p)
+            return np.array([
+                proba_ks * (R_ + self.d) + proba * R_deriv_ * p_ks - self.r,
+                proba_kp * (R_ + self.d) + proba * R_deriv_ * p_kp - self.r
+            ])
+        return jac
+    
+    def solve(self, init_guess: float = 1.0):
+        jac = self.get_jac()
+        # in nash equilibrium, all elements of the jacobian should be 0
+        res = optimize.root(
+            fun = lambda x: jac(x.reshape(self.n, 2)).flatten(),
+            x0 = init_guess * np.ones((self.n, 2)),
+            # x0 = np.exp(np.random.randn(self.n, 2)),
+            method = 'lm',
+            # options = {
+            #     'nit': 10_000
+            # }
+        )
+        # print(res, infodict, ier, mesg)
+        if not res.success:
+            print('WARNING: Solver failed to converge in the specified number of iterations.')
+        return res.x.reshape((self.n, 2))
+
+
+
+class MixedProblem(Problem):
+
+    def __init__(self, d: np.ndarray, r: np.ndarray, prodFunc: ProdFunc, csf: CSF = CSF()):
+        super().__init__(d, r, prodFunc, csf)
+        self.hist = np.empty((0, self.n, 2))
     
     def get_func(self, i: int):
         assert(self.hist.shape[0] > 0)
@@ -193,12 +255,12 @@ class Problem:
         self.hist = history.copy()
         strategies = np.empty((self.n, 2))
         for i in range(self.n):
-            res = minimize(
+            res = optimize.minimize(
                 self.get_func(i),
                 jac=self.get_jac(i),
                 x0=history[-1, i, :],
                 method='trust-constr',
-                bounds=Bounds([0.0, 0.0], [np.inf, np.inf]),
+                bounds=optimize.Bounds([0.0, 0.0], [np.inf, np.inf]),
                 options={
                     'xtol': solver_tol,
                     'maxiter': solver_max_iters,
@@ -237,9 +299,23 @@ class Problem:
 
 if __name__ == '__main__':
     # run test
+    from time import time
     n = 2
     ones = np.ones(n, dtype=np.float64)
     prodFunc = ProdFunc(1 * ones, 0.5 * ones, 1 * ones, 0.5 * ones, 0.0 * ones)
     problem = Problem(0.1 * ones, 0.06 * ones, prodFunc)
-    hist = problem.solve()
+    # hist = problem.solve()
+    # print(hist)
+    # print(problem.get_jac()(np.array([[0.1, 0.2], [1.0, 2.0], [10., 2.]])))
+    start_time = time()
+    sol = problem.solve()
+    end_time = time()
+    print(f'Found solution in {end_time - start_time:.2f} seconds:')
+    print(sol)
+
+    problem = MixedProblem(0.1 * ones, 0.06 * ones, prodFunc)
+    start_time = time()
+    hist = problem.solve()[-1]
+    end_time = time()
+    print(f'Found solution in {end_time - start_time:.2f} seconds:')
     print(hist)

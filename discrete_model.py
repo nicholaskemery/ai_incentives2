@@ -1,53 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-class CSF:
-
-    def __init__(self, w: float = 1.0, l: float = 0.0, a_w: float = 0.0, a_l: float = 0.0):
-        """
-        w is reward for winner
-        l is reward for loser(s)
-        a_w is reward per unit of p for winner
-        a_l is reward per unit of p for loser
-
-        win proba is p[i] / sum(p)
-        """
-        self.w = w
-        self.l = l
-        self.a_w = a_w
-        self.a_l = a_l
-    
-    def reward(self, i: int, p: np.ndarray):
-        win_proba = p[..., i] / p.sum(axis=-1)
-        return (
-            (self.w + p[..., i] * self.a_w) * win_proba
-            + (self.l + p[..., i] * self.a_l) * (1 - win_proba)
-        )
-    
-    def all_rewards(self, p: np.ndarray):
-        win_probas = p / p.sum(axis=-1)
-        return (
-            (self.w + p * self.a_w) * win_probas
-            + (self.l + p * self.a_l) * (1 - win_probas)
-        )
-    
-    def reward_deriv(self, i: int, p: np.ndarray):
-        sum_ = p.sum(axis=-1)
-        win_proba = p[..., i] / sum_
-        win_proba_deriv = (sum_ - p[..., i]) / sum_**2
-        return (
-            self.a_l + (self.a_w - self.a_l) * win_proba
-            + (self.w - self.l + (self.a_w - self.a_l) * p[..., i]) * win_proba_deriv
-        )
-    
-    def all_reward_derivs(self, p: np.ndarray):
-        sum_ = p.sum(axis=-1)
-        win_probas = p / sum_
-        win_proba_derivs = (sum_ - p) / sum_**2
-        return (
-            self.a_l + (self.a_w - self.a_l) * win_probas
-            + (self.w - self.l + (self.a_w - self.a_l) * p) * win_proba_derivs
-        )
+from simple_model import CSF
 
 
 class Game:
