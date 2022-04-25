@@ -26,6 +26,8 @@ else:
 # (i.e., for comparable precision on the cpp backend, increase nlp_exit_tol).
 
 
+PLOT_FIGSIZE = (15, 12)
+
 VEC_PARAM_NAMES = ['A', 'alpha', 'B', 'beta', 'theta', 'd', 'r']
 
 def _roots_multiproc_helper(args):
@@ -185,50 +187,73 @@ class Scenario:
             )
         return strats
     
-    def _plot_helper(self, s: np.ndarray, p: np.ndarray, payoffs: np.ndarray, plotname: str, labels: list = None):
+    def _plot_helper(
+        self,
+        s: np.ndarray,
+        p: np.ndarray,
+        payoffs: np.ndarray,
+        plotname: str,
+        labels: list = None,
+        title: str = None
+    ):
         xvar = getattr(self, self.varying_param)
+        fig, axs = plt.subplots(2, 2, figsize=PLOT_FIGSIZE)
         # plot performance
         if labels is None:
-            plt.plot(xvar, p.mean(axis=-1))
+            axs[0, 0].plot(xvar, p.mean(axis=-1))
         else:
             for i in range(self.n_players):
-                plt.plot(xvar, p[:, i], label=labels[i])
-            plt.legend()
-        plt.ylabel('performance')
-        plt.xlabel(self.varying_param)
-        plt.savefig(f'plots/{plotname}_performance.png')
-        plt.clf()
+                axs[0, 0].plot(xvar, p[:, i], label=labels[i])
+            axs[0, 0].legend()
+        axs[0, 0].set_ylabel('performance')
+        axs[0, 0].set_xlabel(self.varying_param)
+        # plt.xlabel(self.varying_param)
+        # plt.savefig(f'plots/{plotname}_performance.png')
+        # plt.clf()
+        # plot safety
         if labels is None:
-            plt.plot(xvar, s.mean(axis=-1))
+            axs[0, 1].plot(xvar, s.mean(axis=-1))
         else:
             for i in range(self.n_players):
-                plt.plot(xvar, s[:, i], label=labels[i])
-            plt.legend()
-        plt.ylabel('safety')
-        plt.xlabel(self.varying_param)
-        plt.savefig(f'plots/{plotname}_safety.png')
-        plt.clf()
+                axs[0, 1].plot(xvar, s[:, i], label=labels[i])
+            axs[0, 1].legend()
+        axs[0, 1].set_ylabel('safety')
+        axs[0, 1].set_xlabel(self.varying_param)
+        # plt.xlabel(self.varying_param)
+        # plt.savefig(f'plots/{plotname}_safety.png')
+        # plt.clf()
         # plot total disaster proba
         probas = s / (1 + s)
         total_proba = probas.prod(axis=-1)
-        plt.plot(xvar, total_proba)
-        plt.ylabel('Proba of safe outcome')
-        plt.xlabel(self.varying_param)
-        plt.savefig(f'plots/{plotname}_total_safety.png')
-        plt.clf()
+        axs[1, 0].plot(xvar, total_proba)
+        axs[1, 0].set_ylabel('Proba of safe outcome')
+        axs[1, 0].set_xlabel(self.varying_param)
+        # plt.xlabel(self.varying_param)
+        # plt.savefig(f'plots/{plotname}_total_safety.png')
+        # plt.clf()
         # plot net payoffs
         if labels is None:
-            plt.plot(xvar, payoffs.mean(axis=-1))
+            axs[1, 1].plot(xvar, payoffs.mean(axis=-1))
         else:
             for i in range(self.n_players):
-                plt.plot(xvar, payoffs[:, i], label=labels[i])
-            plt.legend()
-        plt.ylabel('net payoff')
-        plt.xlabel(self.varying_param)
-        plt.savefig(f'plots/{plotname}_payoff.png')
+                axs[1, 1].plot(xvar, payoffs[:, i], label=labels[i])
+            axs[1, 1].legend()
+        axs[1, 1].set_ylabel('net payoff')
+        axs[1, 1].set_xlabel(self.varying_param)
+
+        if title is not None:
+            fig.suptitle(title)
+        plt.savefig(f'plots/{plotname}.png')
         plt.clf()
         
-    def _solve_cpp(self, param_dict: dict, plot: bool, plotname: str = 'scenario', labels: list = None):
+    def _solve_cpp(
+        self,
+        param_dict: dict,
+        plot: bool,
+        plotname: str = 'scenario',
+        labels: list = None,
+        title: str = None
+    ):
         strats = self._solver_helper(_cpp_multiproc_helper, param_dict)
         # get s and p for each strategy
         s_p = np.array([
@@ -281,11 +306,18 @@ class Scenario:
             )
         ])
         if plot:
-            self._plot_helper(s, p, payoffs, plotname, labels)
+            self._plot_helper(s, p, payoffs, plotname, labels, title)
         return strats, s, p, payoffs
             
 
-    def _solve_python(self, param_dict: dict, plot: bool, plotname: str = 'scenario', labels: list = None):
+    def _solve_python(
+        self,
+        param_dict: dict,
+        plot: bool,
+        plotname: str = 'scenario',
+        labels: list = None,
+        title: str = None
+    ):
         strats = self._solver_helper(_python_multiproc_helper, param_dict)
         # get s and p for each strategy
         prodFuncs = [
@@ -320,10 +352,17 @@ class Scenario:
             for strat, problem in zip(strats, problems)
         ])
         if plot:
-            self._plot_helper(s, p, payoffs, plotname, labels)
+            self._plot_helper(s, p, payoffs, plotname, labels, title)
         return strats, s, p, payoffs
     
-    def _solve_roots(self, param_dict: dict, plot: bool, plotname: str = 'scenario', labels: list = None):
+    def _solve_roots(
+        self,
+        param_dict: dict,
+        plot: bool,
+        plotname: str = 'scenario',
+        labels: list = None,
+        title: str = None
+    ):
         strats = self._solver_helper(_roots_multiproc_helper, param_dict)
         # get s and p for each strategy
         prodFuncs = [
@@ -358,7 +397,7 @@ class Scenario:
             for strat, problem in zip(strats, problems)
         ])
         if plot:
-            self._plot_helper(s, p, payoffs, plotname, labels)
+            self._plot_helper(s, p, payoffs, plotname, labels, title)
         return strats, s, p, payoffs
     
     def solve_with_secondary_variation(
@@ -366,6 +405,7 @@ class Scenario:
         plot: bool = True,
         plotname: str = 'scenario',
         labels: list = None,
+        title: str = None,
         method: str = 'roots'
     ):
         if labels is not None:
@@ -398,57 +438,61 @@ class Scenario:
             solver(param_dict, plot = False) for param_dict in param_dicts
         ]))
         if plot:
+            fig, axs = plt.subplots(2, 2, figsize=PLOT_FIGSIZE)
             xvar = getattr(self, self.varying_param)
             # plot performance
             if labels is None:
                 for p in p_list:
-                    plt.plot(xvar, p.mean(axis=-1))
+                    axs[0, 0].plot(xvar, p.mean(axis=-1))
             else:
                 for p, label in zip(p_list, labels):
-                    plt.plot(xvar, p.mean(axis=-1), label=label)
-                plt.legend()
-            plt.ylabel('performance')
-            plt.xlabel(self.varying_param)
-            plt.savefig(f'plots/{plotname}_performance.png')
-            plt.clf()
+                    axs[0, 0].plot(xvar, p.mean(axis=-1), label=label)
+                axs[0, 0].legend()
+            axs[0, 0].set_ylabel('performance')
+            axs[0, 0].set_xlabel(self.varying_param)
+            # plt.savefig(f'plots/{plotname}_performance.png')
+            # plt.clf()
             if labels is None:
                 for s in s_list:
-                    plt.plot(xvar, s.mean(axis=-1))
+                    axs[0, 1].plot(xvar, s.mean(axis=-1))
             else:
                 for s, label in zip(s_list, labels):
-                    plt.plot(xvar, s.mean(axis=-1), label=label)
-                plt.legend()
-            plt.ylabel('safety')
-            plt.xlabel(self.varying_param)
-            plt.savefig(f'plots/{plotname}_safety.png')
-            plt.clf()
+                    axs[0, 1].plot(xvar, s.mean(axis=-1), label=label)
+                axs[0, 1].legend()
+            axs[0, 1].set_ylabel('safety')
+            axs[0, 1].set_xlabel(self.varying_param)
+            # plt.savefig(f'plots/{plotname}_safety.png')
+            # plt.clf()
             # plot total disaster proba
             if labels is None:
                 for s in s_list:
                     probas = s / (1 + s)
                     total_proba = probas.prod(axis=-1)
-                    plt.plot(xvar, total_proba)
+                    axs[1, 0].plot(xvar, total_proba)
             else:
                 for s, label in zip(s_list, labels):
                     probas = s / (1 + s)
                     total_proba = probas.prod(axis=-1)
-                    plt.plot(xvar, total_proba, label=label)
-                plt.legend()
-            plt.ylabel('Proba of safe outcome')
-            plt.xlabel(self.varying_param)
-            plt.savefig(f'plots/{plotname}_total_safety.png')
-            plt.clf()
+                    axs[1, 0].plot(xvar, total_proba, label=label)
+                axs[1, 0].legend()
+            axs[1, 0].set_ylabel('Proba of safe outcome')
+            axs[1, 0].set_xlabel(self.varying_param)
+            # plt.savefig(f'plots/{plotname}_total_safety.png')
+            # plt.clf()
             # plot net payoffs
             if labels is None:
                 for payoffs in payoffs_list:
-                    plt.plot(xvar, payoffs.mean(axis=-1))
+                    axs[1, 1].plot(xvar, payoffs.mean(axis=-1))
             else:
                 for payoffs, label in zip(payoffs_list, labels):
-                    plt.plot(xvar, payoffs.mean(axis=-1), label=label)
-                plt.legend()
-            plt.ylabel('net payoff')
-            plt.xlabel(self.varying_param)
-            plt.savefig(f'plots/{plotname}_payoff.png')
+                    axs[1, 1].plot(xvar, payoffs.mean(axis=-1), label=label)
+                axs[1, 1].legend()
+            axs[1, 1].set_ylabel('net payoff')
+            axs[1, 1].set_xlabel(self.varying_param)
+
+            if title is not None:
+                fig.suptitle(title)
+            plt.savefig(f'plots/{plotname}.png')
             plt.clf()
     
     def solve(
@@ -456,10 +500,11 @@ class Scenario:
         plot: bool = True,
         plotname: str = 'scenario',
         labels: list = None,
+        title: str = None,
         method: str = 'roots' # other options are 'python' and 'cpp'
 ):
         if self.n_steps_secondary != 0:
-            return self.solve_with_secondary_variation(plot, plotname, labels, method)
+            return self.solve_with_secondary_variation(plot, plotname, labels, title, method)
 
         if labels is not None:
             assert len(labels) == self.n_players, "Length of labels should match number of players"
@@ -479,11 +524,11 @@ class Scenario:
             for param_name in VEC_PARAM_NAMES
         }
         if method == 'cpp':
-            return self._solve_cpp(param_dict, plot, plotname, labels)
+            return self._solve_cpp(param_dict, plot, plotname, labels, title)
         elif method == 'python':
-            return self._solve_python(param_dict, plot, plotname, labels)
+            return self._solve_python(param_dict, plot, plotname, labels, title)
         else:
-            return self._solve_roots(param_dict, plot, plotname, labels)
+            return self._solve_roots(param_dict, plot, plotname, labels, title)
 
 
 
@@ -498,7 +543,7 @@ if __name__ == '__main__':
         alpha = np.array([0.5, 0.5]),
         B = np.array([10., 10.]),
         beta = np.array([0.5, 0.5]),
-        theta = np.array([0., 0.]),
+        theta = np.array([0.25, 0.25]),
         d = np.array([1., 1.]),
         r = np.linspace(0.02, 0.04, 20),
         varying_param = 'r'  # We need to specify which parameter we're varying; this will be the x-axis on resulting plots
@@ -506,6 +551,7 @@ if __name__ == '__main__':
     scenario.solve(
         plotname = 'example0',
         labels = None,  # We don't provide labels for each player, since they're all the same
+        title = 'Outcomes with r increasing, homogeneous players',
         method = method
     )
 
@@ -516,7 +562,7 @@ if __name__ == '__main__':
         alpha = np.array([0.5, 0.5]),
         B = np.linspace(10., 20., 20),
         beta = np.array([0.5, 0.5]),
-        theta = np.array([0., 0.]),
+        theta = np.array([0.25, 0.25]),
         d = np.array([1., 1.]),
         r = np.array([0.04, 0.04]),
         varying_param = 'B'
@@ -524,6 +570,7 @@ if __name__ == '__main__':
     scenario.solve(
         plotname = 'example1',
         labels = ['A=5', 'A=10'],  # We provide labels for each player here since the players have different params
+        title = 'Outcomes with B increasing, heterogeneous players',
         method = method
     )
 
@@ -535,7 +582,7 @@ if __name__ == '__main__':
         alpha = np.array([0.5, 0.5, 0.5]),
         B = np.array([5., 10., 15.]),
         beta = np.array([0.5, 0.5, 0.5]),
-        theta = np.array([0., 0., 0.]),
+        theta = np.array([0.25, 0.25, 0.25]),
         d = np.array([1., 1., 1.]),
         r = np.linspace(0.02, 0.04, 20),
         varying_param = 'r'
@@ -543,6 +590,7 @@ if __name__ == '__main__':
     scenario.solve(
         plotname = 'example2',
         labels = ['weak player', 'medium player', 'strong player'],
+        title = 'Outcomes with three players of varying productivity (A and B)',
         method = method
     )
 
@@ -557,7 +605,7 @@ if __name__ == '__main__':
             [30., 30.]
         ]),
         beta = np.array([0.5, 0.5]),
-        theta = np.array([0., 0.]),
+        theta = np.array([0.25, 0.25]),
         d = np.array([1., 1.]),
         r = np.linspace(0.02, 0.04, 20),
         varying_param = 'r',
@@ -566,5 +614,6 @@ if __name__ == '__main__':
     scenario.solve(
         plotname = 'example3',
         labels = ['B=10', 'B=20', 'B=30'],
+        title = 'Outcomes with varying r and B',
         method = method
     )
