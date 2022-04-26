@@ -107,32 +107,104 @@ class SymmetricTwoPlayerGame(Game):
             + (1-p[0]) * (1-p[1]) * self.payoff_matrix[0, 0, 0]
             for p in ps
         ]
+    
+    def nash_safeties(self, ps=None):
+        if ps is None:
+            ps = self.find_nash_eqs()
+        return [
+            (1 - p[0]) * (1 - p[1])
+            + (p[0] * (1 - p[1]) + (1 - p[0]) * p[1]) * self.sigma[0]
+            + p[0] * p[1] * self.sigma[0]**2
+            for p in ps
+        ]
+
+
+def _plot_helper(
+    xvar,
+    safe_payoffs, mixed_payoffs, risky_payoffs,
+    safe_safeties, mixed_safeties, risky_safeties,
+    title, x_axis_label
+):
+    fig, axs = plt.subplots(2, sharex=True, figsize=(8, 10))
+    axs[0].plot(xvar, safe_payoffs, label='safe')
+    axs[0].plot(xvar, mixed_payoffs, label='mixed')
+    axs[0].plot(xvar, risky_payoffs, label='risky')
+    axs[0].set_ylabel('payoff')
+    axs[0].legend()
+    axs[1].plot(xvar, safe_safeties, label='safe')
+    axs[1].plot(xvar, mixed_safeties, label='mixed')
+    axs[1].plot(xvar, risky_safeties, label='risky')
+    axs[1].set_ylabel('safety')
+    axs[1].legend()
+    plt.xlabel(x_axis_label)
+    fig.suptitle(title)
+    plt.show()
+
+
+def plot_two_player_varying_sigma(pi: float, sigmas: np.ndarray, d: float, csf: CSF = CSF()):
+    safe_payoffs = np.ones_like(sigmas) * np.nan
+    mixed_payoffs = np.ones_like(sigmas) * np.nan
+    risky_payoffs = np.ones_like(sigmas) * np.nan
+    safe_safeties = np.ones_like(sigmas) * np.nan
+    mixed_safeties = np.ones_like(sigmas) * np.nan
+    risky_safeties = np.ones_like(sigmas) * np.nan
+    for i, sigma in enumerate(sigmas):
+        game = SymmetricTwoPlayerGame(pi, sigma, d, csf)
+        ps = game.find_nash_eqs()
+        payoffs = game.nash_payoffs(ps)
+        safeties = game.nash_safeties(ps)
+        for (p0, _), payoff, safety in zip(ps, payoffs, safeties):
+            if p0 == 1.0:
+                risky_payoffs[i] = payoff
+                risky_safeties[i] = safety
+            elif p0 == 0.0:
+                safe_payoffs[i] = payoff
+                safe_safeties[i] = safety
+            else:
+                mixed_payoffs[i] = payoff
+                mixed_safeties[i] = safety
+    _plot_helper(
+        sigmas,
+        safe_payoffs, mixed_payoffs, risky_payoffs,
+        safe_safeties, mixed_safeties, risky_safeties,
+        title=f'Outcomes with π = {pi}', x_axis_label='σ'
+    )
+
+
+def plot_two_player_varying_pi(pis: np.ndarray, sigma: float, d: float, csf: CSF = CSF()):
+    safe_payoffs = np.ones_like(pis) * np.nan
+    mixed_payoffs = np.ones_like(pis) * np.nan
+    risky_payoffs = np.ones_like(pis) * np.nan
+    safe_safeties = np.ones_like(pis) * np.nan
+    mixed_safeties = np.ones_like(pis) * np.nan
+    risky_safeties = np.ones_like(pis) * np.nan
+    for i, pi in enumerate(pis):
+        game = SymmetricTwoPlayerGame(pi, sigma, d, csf)
+        ps = game.find_nash_eqs()
+        payoffs = game.nash_payoffs(ps)
+        safeties = game.nash_safeties(ps)
+        for (p0, _), payoff, safety in zip(ps, payoffs, safeties):
+            if p0 == 1.0:
+                risky_payoffs[i] = payoff
+                risky_safeties[i] = safety
+            elif p0 == 0.0:
+                safe_payoffs[i] = payoff
+                safe_safeties[i] = safety
+            else:
+                mixed_payoffs[i] = payoff
+                mixed_safeties[i] = safety
+    _plot_helper(
+        pis,
+        safe_payoffs, mixed_payoffs, risky_payoffs,
+        safe_safeties, mixed_safeties, risky_safeties,
+        title=f'Outcomes with σ = {sigma}', x_axis_label='π'
+    )
 
 
 if __name__ == '__main__':
-    n = 50
     pi = 0.25
-    sigmas = np.linspace(0.0, 1.0, n)
-    mixed_ps = np.ones(n) * np.nan
-    safe_payoffs = np.ones(n) * np.nan
-    mixed_payoffs = np.ones(n) * np.nan
-    risky_payoffs = np.ones(n) * np.nan
-    for i, sigma in enumerate(sigmas):
-        game = SymmetricTwoPlayerGame(pi, sigma, 0.5, CSF(a_w=0.1, a_l=0.1))
-        ps = game.find_nash_eqs()
-        payoffs = game.nash_payoffs(ps)
-        for (p0, _), payoff in zip(ps, payoffs):
-            if p0 == 1.0:
-                risky_payoffs[i] = payoff
-            elif p0 == 0.0:
-                safe_payoffs[i] = payoff
-            else:
-                mixed_ps[i] = p0
-                mixed_payoffs[i] = payoff
-    plt.plot(sigmas, mixed_ps)
-    plt.show()
-    plt.plot(sigmas, safe_payoffs, label='safe')
-    plt.plot(sigmas, mixed_payoffs, label='mixed')
-    plt.plot(sigmas, risky_payoffs, label='risky')
-    plt.legend()
-    plt.show()
+    sigmas = np.linspace(0.0, 1.0, 200)
+    plot_two_player_varying_sigma(pi, sigmas, 0.2, CSF(a_w=0.2, a_l=0.2))
+    pis = np.linspace(0.0, 1.0, 200)
+    sigma = 0.75
+    plot_two_player_varying_pi(pis, sigma, 0.2, CSF(a_w=0.2, a_l=0.2))
