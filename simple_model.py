@@ -1,10 +1,11 @@
-from tracemalloc import start
-import warnings
-
 import numpy as np
+# import pygambit as pg
 from scipy import optimize
 
+import warnings
 warnings.filterwarnings('ignore')
+
+
 
 SOLVER_TOL = 1e-3
 SOLVER_MAX_ITERS = 500
@@ -154,7 +155,17 @@ class Problem:
         """Basically just runs self.net_payoff for all the i"""
         s, p = self.prodFunc.F(Ks, Kp)
         proba = (s / (1 + s)).prod(axis=-1)
-        return proba * self.csf.all_rewards(p) - (1 - proba) * self.d - self.r * (Ks + Kp)
+        if p.ndim == 1:
+            return proba * self.csf.all_rewards(p) - (1 - proba) * self.d - self.r * (Ks + Kp)
+        elif p.ndim == 2:
+            return np.stack(
+                [
+                    proba_ * self.csf.all_rewards(p_) - (1 - proba_) * self.d - self.r * (Ks_ + Kp_)
+                    for proba_, p_, Ks_, Kp_ in zip(proba, p, Ks, Kp)
+                ]
+            )
+        else:
+            raise ValueError('Inputs must be 1- or 2-dimensional')
     
     def get_jac(self):
         prod_jacs = [self.prodFunc.get_jac(i) for i in range(self.n)]
@@ -182,23 +193,80 @@ class Problem:
             ])
         return jac
     
-    def solve(self, init_guess: float = 1.0):
+    def _resolve_multiple_solutions(
+        self,
+        results: np.ndarray,
+        s: np.ndarray,
+        p: np.ndarray,
+        payoffs: np.ndarray,
+        prefer_best_avg: bool
+    ):
+        # try and see if one solution is best for all players
+        argmaxes = np.argmax(payoffs, axis=0)  # shape = self.n
+        best = argmaxes[0]
+        if any(x != best for x in argmaxes[1:]):
+            # Note: Maybe possible to use pygambit to disambiguate solutions here?
+            if prefer_best_avg:
+                print('Warning: Multiple potential solutions found; there may be more than one equilibrium!')
+                best = np.argmax(np.mean(payoffs, axis=1))
+            else:
+                # just return no result
+                return (
+                    np.ones((self.n, 2)) * np.nan,
+                    np.ones(self.n) * np.nan,
+                    np.ones(self.n) * np.nan,
+                    np.ones(self.n) * np.nan
+                )
+        return results[best], p[best], s[best], payoffs[best]
+
+
+    def solve(self, init_guesses: list = [10.0**(3*i) for i in (-1, 0, 1)], prefer_best_avg: bool = False):
         jac = self.get_jac()
         # in nash equilibrium, all elements of the jacobian should be 0
-        res = optimize.root(
-            fun = lambda x: jac(x.reshape(self.n, 2)).flatten(),
-            x0 = init_guess * np.ones((self.n, 2)),
-            # x0 = np.exp(np.random.randn(self.n, 2)),
-            method = 'lm',
-            # options = {
-            #     'nit': 10_000
-            # }
-        )
-        # print(res, infodict, ier, mesg)
-        if not res.success:
-            print('WARNING: Solver failed to converge in the specified number of iterations.')
-        return res.x.reshape((self.n, 2))
-
+        # try at multiple initial guesses to be more confident we're not finding local optimum
+        results = np.empty((len(init_guesses), self.n, 2))
+        successes = np.zeros(len(init_guesses), dtype=bool)
+        for i, init_guess in enumerate(init_guesses):
+            res = optimize.root(
+                fun = lambda x: jac(x.reshape(self.n, 2)).flatten(),
+                x0 = init_guess * np.ones((self.n, 2)),
+                # x0 = np.exp(np.random.randn(self.n, 2)),
+                method = 'lm',
+                options = {
+                    # this is twice as much as the default maxiter
+                    # note that I've found that if it doesn't converge very quickly, it probably won't at all
+                    'maxiter': 200 * (self.n+1)
+                }
+            )
+            if res.success:
+                successes[i] = True
+                results[i] = res.x.reshape((self.n, 2))
+        if not any(successes):
+            print('Solver failed to converge from the given initial guesses')
+            return np.ones((self.n, 2)) * np.nan, np.ones(self.n) * np.nan, np.ones(self.n) * np.nan, np.ones(self.n) * np.nan
+        # otherwise, calculate other values and figure out which of the solutions are stable
+        results = results[[i for i, s in enumerate(successes) if s]]
+        results = results[np.unique(results.astype(np.float16), axis=0, return_index=True)[1]]  # remove results that are approximate duplicates
+        p, s = self.prodFunc.F(results[..., 0], results[..., 1])
+        payoffs = self.all_net_payoffs(results[..., 0], results[..., 1])  # shape = len(results) x self.n
+        # reject solutions with payoffs worse than worse case scenario of doing nothing
+        # (players can always get at least -d if they just produce nothing)
+        good_idxs = [all(x>= -self.d) for x in payoffs]
+        if not any(good_idxs):
+            return (
+                np.ones((self.n, 2)) * np.nan,
+                np.ones(self.n) * np.nan,
+                np.ones(self.n) * np.nan,
+                np.ones(self.n) * np.nan
+            )
+        results = results[good_idxs]
+        s = s[good_idxs]
+        p = p[good_idxs]
+        payoffs = payoffs[good_idxs]
+        if results.shape[0] == 1:
+            return results[0], p[0], s[0], payoffs[0]
+        else:
+            return self._resolve_multiple_solutions(results, s, p, payoffs, prefer_best_avg)
 
 
 class MixedProblem(Problem):

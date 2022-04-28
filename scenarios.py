@@ -194,13 +194,14 @@ class Scenario:
         payoffs: np.ndarray,
         plotname: str,
         labels: list = None,
-        title: str = None
+        title: str = None,
+        logscale: bool = False
     ):
         xvar = getattr(self, self.varying_param)
         fig, axs = plt.subplots(2, 2, figsize=PLOT_FIGSIZE)
         # plot performance
         if labels is None:
-            axs[0, 0].plot(xvar, p.mean(axis=-1))
+            axs[0, 0].plot(xvar, p.mean(axis=-1), logscale)
         else:
             for i in range(self.n_players):
                 axs[0, 0].plot(xvar, p[:, i], label=labels[i])
@@ -222,6 +223,9 @@ class Scenario:
         # plt.xlabel(self.varying_param)
         # plt.savefig(f'plots/{plotname}_safety.png')
         # plt.clf()
+        if logscale:
+            axs[0, 0].semilogy()
+            axs[0, 1].semilogy()
         # plot total disaster proba
         probas = s / (1 + s)
         total_proba = probas.prod(axis=-1)
@@ -252,7 +256,8 @@ class Scenario:
         plot: bool,
         plotname: str = 'scenario',
         labels: list = None,
-        title: str = None
+        title: str = None,
+        logscale: bool = False
     ):
         strats = self._solver_helper(_cpp_multiproc_helper, param_dict)
         # get s and p for each strategy
@@ -306,7 +311,7 @@ class Scenario:
             )
         ])
         if plot:
-            self._plot_helper(s, p, payoffs, plotname, labels, title)
+            self._plot_helper(s, p, payoffs, plotname, labels, title, logscale)
         return strats, s, p, payoffs
             
 
@@ -316,7 +321,8 @@ class Scenario:
         plot: bool,
         plotname: str = 'scenario',
         labels: list = None,
-        title: str = None
+        title: str = None,
+        logscale: bool = False
     ):
         strats = self._solver_helper(_python_multiproc_helper, param_dict)
         # get s and p for each strategy
@@ -352,7 +358,7 @@ class Scenario:
             for strat, problem in zip(strats, problems)
         ])
         if plot:
-            self._plot_helper(s, p, payoffs, plotname, labels, title)
+            self._plot_helper(s, p, payoffs, plotname, labels, title, logscale)
         return strats, s, p, payoffs
     
     def _solve_roots(
@@ -361,9 +367,12 @@ class Scenario:
         plot: bool,
         plotname: str = 'scenario',
         labels: list = None,
-        title: str = None
+        title: str = None,
+        logscale: bool = False
     ):
-        strats = self._solver_helper(_roots_multiproc_helper, param_dict)
+        strats, s, p, payoffs = tuple(
+            np.array(x) for x in zip(*self._solver_helper(_roots_multiproc_helper, param_dict))
+        )
         # get s and p for each strategy
         prodFuncs = [
             ProdFunc(A_, alpha_, B_, beta_, theta_)
@@ -375,29 +384,29 @@ class Scenario:
                 param_dict['theta']
             )
         ]
-        s_p = np.array([
-            prodFunc.F(strat[:, 0], strat[:, 1])
-            for prodFunc, strat in zip(prodFuncs, strats)
-        ])
-        s, p = s_p[:, 0, :], s_p[:, 1, :]
-        # get payoffs for each strategy
-        problems = [
-            Problem(
-                param_dict['d'][i],
-                param_dict['r'][i],
-                prodFunc,
-                CSF(self.w, self.l, self.a_w, self.a_l)
-            )
-            for i, prodFunc in enumerate(prodFuncs)
-        ]
-        payoffs = np.array([
-            problem.all_net_payoffs(
-                strat[:, 0], strat[:, 1]
-            )
-            for strat, problem in zip(strats, problems)
-        ])
+        # s_p = np.array([
+        #     prodFunc.F(strat[:, 0], strat[:, 1])
+        #     for prodFunc, strat in zip(prodFuncs, strats)
+        # ])
+        # s, p = s_p[:, 0, :], s_p[:, 1, :]
+        # # get payoffs for each strategy
+        # problems = [
+        #     Problem(
+        #         param_dict['d'][i],
+        #         param_dict['r'][i],
+        #         prodFunc,
+        #         CSF(self.w, self.l, self.a_w, self.a_l)
+        #     )
+        #     for i, prodFunc in enumerate(prodFuncs)
+        # ]
+        # payoffs = np.array([
+        #     problem.all_net_payoffs(
+        #         strat[:, 0], strat[:, 1]
+        #     )
+        #     for strat, problem in zip(strats, problems)
+        # ])
         if plot:
-            self._plot_helper(s, p, payoffs, plotname, labels, title)
+            self._plot_helper(s, p, payoffs, plotname, labels, title, logscale)
         return strats, s, p, payoffs
     
     def solve_with_secondary_variation(
@@ -406,6 +415,7 @@ class Scenario:
         plotname: str = 'scenario',
         labels: list = None,
         title: str = None,
+        logscale: bool = False,
         method: str = 'roots'
     ):
         if labels is not None:
@@ -463,6 +473,9 @@ class Scenario:
             axs[0, 1].set_xlabel(self.varying_param)
             # plt.savefig(f'plots/{plotname}_safety.png')
             # plt.clf()
+            if logscale:
+                axs[0, 0].semilogy()
+                axs[0, 1].semilogy()
             # plot total disaster proba
             if labels is None:
                 for s in s_list:
@@ -501,10 +514,11 @@ class Scenario:
         plotname: str = 'scenario',
         labels: list = None,
         title: str = None,
+        logscale: bool = False,
         method: str = 'roots' # other options are 'python' and 'cpp'
 ):
         if self.n_steps_secondary != 0:
-            return self.solve_with_secondary_variation(plot, plotname, labels, title, method)
+            return self.solve_with_secondary_variation(plot, plotname, labels, title, logscale, method)
 
         if labels is not None:
             assert len(labels) == self.n_players, "Length of labels should match number of players"
@@ -524,11 +538,11 @@ class Scenario:
             for param_name in VEC_PARAM_NAMES
         }
         if method == 'cpp':
-            return self._solve_cpp(param_dict, plot, plotname, labels, title)
+            return self._solve_cpp(param_dict, plot, plotname, labels, title, logscale)
         elif method == 'python':
-            return self._solve_python(param_dict, plot, plotname, labels, title)
+            return self._solve_python(param_dict, plot, plotname, labels, title, logscale)
         else:
-            return self._solve_roots(param_dict, plot, plotname, labels, title)
+            return self._solve_roots(param_dict, plot, plotname, labels, title, logscale)
 
 
 
