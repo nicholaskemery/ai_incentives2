@@ -1,4 +1,3 @@
-from re import M
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -8,7 +7,7 @@ from typing import Callable, Tuple
 # set active directory to location of this file
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
-from simple_model import HybridProblem, ProdFunc, CSF, Problem, MixedProblem
+from simple_model import ProdFunc, CSF, Problem, HybridProblem, MixedProblem
 
 # check if cpp backend is available
 if os.path.exists('build/libpybindings.so'):
@@ -62,7 +61,7 @@ def _hybrid_multiproc_helper(args):
         iter_max_iters = max_iters, iter_tol = exit_tol,
         solver_tol = nlp_exit_tol, solver_max_iters = nlp_max_iters
     )
-    return (result.results, result.s, result.p, result.payoffs)
+    return result.unpack()
 
 
 def _python_multiproc_helper(args):

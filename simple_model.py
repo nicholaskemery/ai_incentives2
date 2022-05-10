@@ -1,5 +1,4 @@
 import numpy as np
-# import pygambit as pg
 from scipy import optimize
 from dataclasses import dataclass
 
@@ -62,7 +61,7 @@ class ProdFunc:
             s_mult = self.A[i] * self.alpha[i] * (s / self.A[i]) ** (1 - 1 / self.alpha[i])
             # p_mult is dp/dKp
             p_mult = self.B[i] * self.beta[i] * (p / self.B[i]) ** (1 - 1 / self.beta[i])
-            return np.array([
+            return np.array([one
                 # partial derivatives of s
                 [
                     s_mult * p ** -self.theta[i],  # w.r.t. Ks
@@ -151,6 +150,9 @@ class SolverResult:
         self.p =self.p[unique]
         self.payoffs = self.payoffs[unique]
         return self
+    
+    def unpack(self):
+        return self.results, self.s, self.p, self.payoffs
 
 
 def get_index(solverResult: SolverResult, i: int) -> SolverResult:
@@ -243,10 +245,10 @@ class Problem:
     def _null_result(self) -> SolverResult:
         return SolverResult(
             False,
-            np.ones((self.n, 2)) * np.nan,
-            np.ones(self.n) * np.nan,
-            np.ones(self.n) * np.nan,
-            np.ones(self.n) * np.nan
+            np.fill((self.n, 2), np.nan),
+            np.fill(self.n, np.nan),
+            np.fill(self.n, np.nan),
+            np.fill(self.n, np.nan)
         )
     
     def _resolve_multiple_solutions(
