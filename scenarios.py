@@ -25,6 +25,10 @@ else:
 # solutions on the cpp backend, relative to the python backend
 # (i.e., for comparable precision on the cpp backend, increase nlp_exit_tol).
 
+DEFAULT_MAX_ITERS = 50
+DEFAULT_EXIT_TOL = 1e-6
+DEFAULT_NLP_MAX_ITERS = 500
+DEFAULT_NLP_ITER_TOL = 1e-6
 
 PLOT_FIGSIZE = (15, 12)
 
@@ -162,10 +166,10 @@ class Scenario:
         a_w: float = 0.0,  # reward per p if winner
         a_l: float = 0.0,  # reward per p if loser
         # params for solver (ignored if using roots method)
-        max_iters: int = 100,
-        exit_tol: float = 1e-3,  # stop iterating if players' strategies change by less than this in an iteration
-        nlp_max_iters: int = 500,
-        nlp_exit_tol: float = 1e-3,
+        max_iters: int = DEFAULT_MAX_ITERS,
+        exit_tol: float = DEFAULT_EXIT_TOL,  # stop iterating if players' strategies change by less than this in an iteration
+        nlp_max_iters: int = DEFAULT_MAX_ITERS,
+        nlp_exit_tol: float = DEFAULT_EXIT_TOL,
         # which params are we changing?
         varying_param: str = 'r',  # By default we look at changes in r
         secondary_varying_param: str = None,  # not necessary to provide a secondary varying param

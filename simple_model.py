@@ -136,6 +136,23 @@ class SolverResult:
     p: np.ndarray
     payoffs: np.ndarray
 
+    def prune_duplicates(self, atol=1e-6, rtol=9e-1):
+        dups = []
+        unique = []
+        for i, strats1 in enumerate(self.results):
+            if i in dups:
+                continue
+            for j, strats2 in enumerate(self.results[i+1:]):
+                if np.isclose(strats2, strats1, atol=atol, rtol=rtol).all():
+                    dups.append(j+1)
+            unique.append(i)
+        self.results = self.results[unique]
+        self.s = self.s[unique]
+        self.p =self.p[unique]
+        self.payoffs = self.payoffs[unique]
+        return self
+
+
 def get_index(solverResult: SolverResult, i: int) -> SolverResult:
     return SolverResult(
         solverResult.success,
@@ -153,6 +170,7 @@ def join_results(solverResults) -> SolverResult:
         np.stack((r.p for r in solverResults)),
         np.stack((r.payoffs for r in solverResults))
     )
+
 
 
 class Problem:
@@ -248,6 +266,7 @@ class Problem:
                 best = np.argmax(np.mean(result.payoffs, axis=1))
             else:
                 # just return no result
+                print(f'ambiguous! r = {self.r}')
                 return self._null_result()
         return get_index(result, best)
 
@@ -367,7 +386,7 @@ class HybridProblem(Problem):
                 payoffs = self.all_net_payoffs(new_strats[:, 0], new_strats[:, 1])
                 return SolverResult(True, new_strats, s, p, payoffs)
             strats = new_strats
-        # print(f'Reached max iterations ({solver_max_iters})')
+        print(f'Reached max iterations ({solver_max_iters})')
         s, p = self.prodFunc.F(strats[:, 0], strats[:, 1])
         payoffs = self.all_net_payoffs(strats[:, 0], strats[:, 1])
         # Signal not successful since it doesn't seem to have converged
@@ -395,7 +414,8 @@ class HybridProblem(Problem):
                 good_results.append(iter_result)
             # if np.abs((new_strats - strats) / strats).max() < comparison_tol:
             #     good_idxs.append(i)
-        return self._resolve_multiple_solutions(join_results(good_results))
+        combined_results = join_results(good_results).prune_duplicates()
+        return self._resolve_multiple_solutions(combined_results)
 
 
 
