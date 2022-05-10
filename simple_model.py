@@ -1,6 +1,7 @@
 import numpy as np
 # import pygambit as pg
 from scipy import optimize
+from dataclasses import dataclass
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -126,6 +127,34 @@ class CSF:
         )
 
 
+
+@dataclass
+class SolverResult:
+    success: bool
+    results: np.ndarray
+    s: np.ndarray
+    p: np.ndarray
+    payoffs: np.ndarray
+
+def get_index(solverResult: SolverResult, i: int) -> SolverResult:
+    return SolverResult(
+        solverResult.success,
+        solverResult.results[i],
+        solverResult.s[i],
+        solverResult.p[i],
+        solverResult.payoffs[i]
+    )
+
+def join_results(solverResults) -> SolverResult:
+    return SolverResult(
+        all((r.success for r in solverResults)),
+        np.stack((r.results for r in solverResults)),
+        np.stack((r.s for r in solverResults)),
+        np.stack((r.p for r in solverResults)),
+        np.stack((r.payoffs for r in solverResults))
+    )
+
+
 class Problem:
 
     def __init__(self, d: np.ndarray, r: np.ndarray, prodFunc: ProdFunc, csf: CSF = CSF()):
@@ -193,34 +222,36 @@ class Problem:
             ])
         return jac
     
+    def _null_result(self) -> SolverResult:
+        return SolverResult(
+            False,
+            np.ones((self.n, 2)) * np.nan,
+            np.ones(self.n) * np.nan,
+            np.ones(self.n) * np.nan,
+            np.ones(self.n) * np.nan
+        )
+    
     def _resolve_multiple_solutions(
         self,
-        results: np.ndarray,
-        s: np.ndarray,
-        p: np.ndarray,
-        payoffs: np.ndarray,
-        prefer_best_avg: bool
-    ):
+        result: SolverResult,
+        prefer_best_avg: bool = False
+    ) -> SolverResult:
+        if result.results.shape[0] == 1:
+            return get_index(result, 0)
         # try and see if one solution is best for all players
-        argmaxes = np.argmax(payoffs, axis=0)  # shape = self.n
+        argmaxes = np.argmax(result.payoffs, axis=0)  # shape = self.n
         best = argmaxes[0]
         if any(x != best for x in argmaxes[1:]):
             # Note: Maybe possible to use pygambit to disambiguate solutions here?
             if prefer_best_avg:
                 print('Warning: Multiple potential solutions found; there may be more than one equilibrium!')
-                best = np.argmax(np.mean(payoffs, axis=1))
+                best = np.argmax(np.mean(result.payoffs, axis=1))
             else:
                 # just return no result
-                return (
-                    np.ones((self.n, 2)) * np.nan,
-                    np.ones(self.n) * np.nan,
-                    np.ones(self.n) * np.nan,
-                    np.ones(self.n) * np.nan
-                )
-        return results[best], p[best], s[best], payoffs[best]
+                return self._null_result()
+        return get_index(result, best)
 
-
-    def solve(self, init_guesses: list = [10.0**(3*i) for i in (-1, 0, 1)], prefer_best_avg: bool = False):
+    def _get_unique_results_with_roots_method(self, init_guesses: list) -> SolverResult:
         jac = self.get_jac()
         # in nash equilibrium, all elements of the jacobian should be 0
         # try at multiple initial guesses to be more confident we're not finding local optimum
@@ -238,12 +269,12 @@ class Problem:
                     'maxiter': 200 * (self.n+1)
                 }
             )
-            if res.success:
+            if res.success and np.all(res.x >= 0):
                 successes[i] = True
                 results[i] = res.x.reshape((self.n, 2))
         if not any(successes):
             print('Solver failed to converge from the given initial guesses')
-            return np.ones((self.n, 2)) * np.nan, np.ones(self.n) * np.nan, np.ones(self.n) * np.nan, np.ones(self.n) * np.nan
+            return self._null_result()
         # otherwise, calculate other values and figure out which of the solutions are stable
         results = results[[i for i, s in enumerate(successes) if s]]
         results = results[np.unique(results.astype(np.float16), axis=0, return_index=True)[1]]  # remove results that are approximate duplicates
@@ -253,20 +284,119 @@ class Problem:
         # (players can always get at least -d if they just produce nothing)
         good_idxs = [all(x>= -self.d) for x in payoffs]
         if not any(good_idxs):
-            return (
-                np.ones((self.n, 2)) * np.nan,
-                np.ones(self.n) * np.nan,
-                np.ones(self.n) * np.nan,
-                np.ones(self.n) * np.nan
-            )
+            return self._null_result()
         results = results[good_idxs]
         s = s[good_idxs]
         p = p[good_idxs]
         payoffs = payoffs[good_idxs]
-        if results.shape[0] == 1:
-            return results[0], p[0], s[0], payoffs[0]
-        else:
-            return self._resolve_multiple_solutions(results, s, p, payoffs, prefer_best_avg)
+        return SolverResult(True, results, s, p, payoffs)
+
+    def solve(self, init_guesses: list = [10.0**i for i in range(-3, 4)]) -> SolverResult:
+        solverResult = self._get_unique_results_with_roots_method(init_guesses)
+        if not solverResult.success:
+            return solverResult
+        return self._resolve_multiple_solutions(solverResult)
+
+
+
+class HybridProblem(Problem):
+
+    def get_func(self, i: int, last_strats: np.ndarray):
+        def func(x):
+            last_strats[i, :] = x
+            return -self.net_payoff(i, last_strats[:, 0], last_strats[:, 1]).sum()
+        return func
+    
+    def get_jac_single_i(self, i: int, last_strats: np.ndarray):
+        prod_jac = self.prodFunc.get_jac(i)
+        def jac(x):
+            last_strats[i, :] = x
+            s, p = self.prodFunc.F(last_strats[:, 0], last_strats[:, 1])
+            probas = s / (1 + s)
+            proba = probas.prod()
+            proba_mult = proba / (s[i] * (1 + s[i]))
+            prod_jac_ = prod_jac(last_strats[i, :])
+            s_ks = prod_jac_[0, 0]
+            s_kp = prod_jac_[0, 1]
+            p_ks = prod_jac_[1, 0] # == 0
+            p_kp = prod_jac_[1, 1]
+            proba_ks = proba_mult * s_ks
+            proba_kp = proba_mult * s_kp
+            R_ = self.csf.reward(i, p)
+            R_deriv_ = self.csf.reward_deriv(i, p)
+            return -np.array([
+                proba_ks * (R_ + self.d[i]) + proba * R_deriv_ * p_ks - self.r[i],
+                proba_kp * (R_ + self.d[i]) + proba * R_deriv_ * p_kp - self.r[i]
+            ])
+        return jac
+    
+    def _solve_single_as_iter(self, strats: np.ndarray, solver_tol: float, solver_max_iters: int):
+        # get everyone's best response to given strats
+        for i in range(self.n):
+            res = optimize.minimize(
+                self.get_func(i, strats),
+                jac=self.get_jac_single_i(i, strats),
+                x0=strats[i, :],
+                method='trust-constr',
+                bounds=optimize.Bounds([0.0, 0.0], [np.inf, np.inf]),
+                options={
+                    'xtol': solver_tol,
+                    'maxiter': solver_max_iters
+                }
+            )
+            strats[i, :] = res.x
+        return strats
+    
+    def _solve_as_iter(
+        self,
+        strats: np.ndarray,
+        iter_tol: float,
+        iter_max_iters: int,
+        solver_tol: float,
+        solver_max_iters: int
+    ):
+        for t in range(1, iter_max_iters):
+            new_strats = self._solve_single_as_iter(
+                strats,
+                solver_tol=solver_tol,
+                solver_max_iters=solver_max_iters
+            )
+            if np.abs((new_strats - strats) / strats).max() < iter_tol:
+                # print(f'Exited on iteration {t}')
+                s, p = self.prodFunc.F(new_strats[:, 0], new_strats[:, 1])
+                payoffs = self.all_net_payoffs(new_strats[:, 0], new_strats[:, 1])
+                return SolverResult(True, new_strats, s, p, payoffs)
+            strats = new_strats
+        # print(f'Reached max iterations ({solver_max_iters})')
+        s, p = self.prodFunc.F(strats[:, 0], strats[:, 1])
+        payoffs = self.all_net_payoffs(strats[:, 0], strats[:, 1])
+        # Signal not successful since it doesn't seem to have converged
+        return SolverResult(False, strats, s, p, payoffs)
+
+    def solve(
+        self,
+        init_guesses: list = [10.0**i for i in range(-5, 6)],
+        iter_tol: float = 1e-3,
+        iter_max_iters: int = 10,
+        solver_tol: float = SOLVER_TOL,
+        solver_max_iters: int = SOLVER_MAX_ITERS
+    ):
+        # start by looking for solutions with roots method
+        solverResult = self._get_unique_results_with_roots_method(init_guesses)
+        if not solverResult.success:
+            return solverResult
+        good_results = []
+        for strats in solverResult.results:
+            # iterate a bit on suggested solutions to get them to settle down
+            iter_result = self._solve_as_iter(
+                strats, iter_tol, iter_max_iters, solver_tol, solver_max_iters
+            )
+            if iter_result.success:
+                good_results.append(iter_result)
+            # if np.abs((new_strats - strats) / strats).max() < comparison_tol:
+            #     good_idxs.append(i)
+        return self._resolve_multiple_solutions(join_results(good_results))
+
 
 
 class MixedProblem(Problem):
@@ -371,16 +501,16 @@ if __name__ == '__main__':
     n = 2
     ones = np.ones(n, dtype=np.float64)
     prodFunc = ProdFunc(1 * ones, 0.5 * ones, 1 * ones, 0.5 * ones, 0.0 * ones)
+
+    print('\nSearching for solution with Problem solver...')
     problem = Problem(0.1 * ones, 0.06 * ones, prodFunc)
-    # hist = problem.solve()
-    # print(hist)
-    # print(problem.get_jac()(np.array([[0.1, 0.2], [1.0, 2.0], [10., 2.]])))
     start_time = time()
     sol = problem.solve()
     end_time = time()
     print(f'Found solution in {end_time - start_time:.2f} seconds:')
     print(sol)
 
+    print('\nSearching for solution with MixedProblem solver...')
     problem = MixedProblem(0.1 * ones, 0.06 * ones, prodFunc)
     start_time = time()
     hist = problem.solve()[-1]
