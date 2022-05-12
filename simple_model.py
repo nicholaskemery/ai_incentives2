@@ -61,7 +61,7 @@ class ProdFunc:
             s_mult = self.A[i] * self.alpha[i] * (s / self.A[i]) ** (1 - 1 / self.alpha[i])
             # p_mult is dp/dKp
             p_mult = self.B[i] * self.beta[i] * (p / self.B[i]) ** (1 - 1 / self.beta[i])
-            return np.array([one
+            return np.array([
                 # partial derivatives of s
                 [
                     s_mult * p ** -self.theta[i],  # w.r.t. Ks
@@ -245,10 +245,10 @@ class Problem:
     def _null_result(self) -> SolverResult:
         return SolverResult(
             False,
-            np.fill((self.n, 2), np.nan),
-            np.fill(self.n, np.nan),
-            np.fill(self.n, np.nan),
-            np.fill(self.n, np.nan)
+            np.full((self.n, 2), np.nan),
+            np.full(self.n, np.nan),
+            np.full(self.n, np.nan),
+            np.full(self.n, np.nan)
         )
     
     def _resolve_multiple_solutions(

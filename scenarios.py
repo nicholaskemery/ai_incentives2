@@ -12,7 +12,10 @@ from simple_model import ProdFunc, CSF, Problem, HybridProblem, MixedProblem
 # check if cpp backend is available
 if os.path.exists('build/libpybindings.so'):
     CPP_AVAILABLE = True
-    from cpp_bindings import solve, prod_F, get_payoffs
+    try:
+        from cpp_bindings import solve, prod_F, get_payoffs
+    except OSError:
+        CPP_AVAILABLE = False
 else:
     CPP_AVAILABLE = False
 
