@@ -135,7 +135,7 @@ class SolverResult:
     p: np.ndarray
     payoffs: np.ndarray
 
-    def prune_duplicates(self, atol=1e-6, rtol=9e-1):
+    def prune_duplicates(self, atol=1e-6, rtol=1e-1):
         dups = []
         unique = []
         for i, strats1 in enumerate(self.results):
@@ -143,7 +143,7 @@ class SolverResult:
                 continue
             for j, strats2 in enumerate(self.results[i+1:]):
                 if np.isclose(strats2, strats1, atol=atol, rtol=rtol).all():
-                    dups.append(j+1)
+                    dups.append(i+j+1)
             unique.append(i)
         self.results = self.results[unique]
         self.s = self.s[unique]
