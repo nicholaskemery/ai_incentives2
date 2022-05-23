@@ -299,7 +299,7 @@ class Problem:
         # otherwise, calculate other values and figure out which of the solutions are stable
         results = results[[i for i, s in enumerate(successes) if s]]
         results = results[np.unique(results.astype(np.float16), axis=0, return_index=True)[1]]  # remove results that are approximate duplicates
-        p, s = self.prodFunc.F(results[..., 0], results[..., 1])
+        s, p = self.prodFunc.F(results[..., 0], results[..., 1])
         payoffs = self.all_net_payoffs(results[..., 0], results[..., 1])  # shape = len(results) x self.n
         # reject solutions with payoffs worse than worse case scenario of doing nothing
         # (players can always get at least -d if they just produce nothing)

@@ -47,7 +47,7 @@ def _roots_multiproc_helper(args):
     prodFunc = ProdFunc(A, alpha, B, beta, theta)
     csf = CSF(w, l, a_w, a_l)
     result = Problem(d, r, prodFunc, csf).solve()
-    return (result.results, result.s, result.p, result.payoffs)
+    return result.unpack()
 
 
 def _hybrid_multiproc_helper(args):
@@ -460,7 +460,7 @@ class Scenario:
         labels: list = None,
         title: str = None,
         logscale: bool = False,
-        method: str = 'roots'
+        method: str = 'hybrid'
     ):
         if labels is not None:
             assert len(labels) == self.n_steps_secondary, "Length of labels should match number of secondary variations"
@@ -487,7 +487,12 @@ class Scenario:
             }
             for secondary_variation in getattr(self, self.secondary_varying_param)
         ]
-        solver = self._solve_cpp if method == 'cpp' else self._solve_python if method == 'python' else self._solve_roots
+        solver = (
+            self._solve_cpp if method == 'cpp'
+            else self._solve_python if method == 'python'
+            else self._solve_roots if method == "roots"
+            else self._solve_hybrid
+        )
         strats_list, s_list, p_list, payoffs_list = tuple(zip(*[
             solver(param_dict, plot = False) for param_dict in param_dicts
         ]))
